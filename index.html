@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>مجرة الرسائل</title>
+  <link rel="icon" type="image/svg+xml" href="icon.svg" />
+  </head>
+  <body>
+    <div class="layer" id="parallax">
+      <div class="planet p1"></div>
+      <div class="planet p2"></div>
+      <div class="planet p3"></div>
+    </div>
+    <div class="topbar">
+      <span>مرحبًا بك في مجرّة الرسائل</span>
+      <button id="addBtnTop" class="add-top" title="أضف نجمة">+ أضف نجمة</button>
+    </div>
+    <div id="app"></div>
+
+    <!-- مودال عرض الرسالة -->
+    <div id="modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="mTitle">
+      <div class="card">
+  <button class="close" id="closeBtn" type="button" aria-label="إغلاق">✕</button>
+        <h3 id="mTitle" class="card-title">رسالة</h3>
+        <img id="mImg" alt="صورة المشاركة" />
+        <p id="mText"></p>
+      </div>
+    </div>
+
+  <!-- نموذج إضافة نجمة -->
+    <div id="formSheet" class="sheet" aria-hidden="true">
+      <div class="sheet-header">
+        <h4>أرسل نجمتك</h4>
+  <button id="sheetClose" class="icon-btn" type="button" aria-label="إغلاق">✕</button>
+      </div>
+      <form id="starForm">
+        <label>
+          اسم المرسل
+          <input id="titleInput" type="text" maxlength="80" placeholder="اسم المسافر" required />
+        </label>
+        <label>
+          الرسالة
+          <textarea id="textInput" rows="4" maxlength="400" placeholder="اكتب رسالة قصيرة" required></textarea>
+        </label>  
+        <label>
+          الصورة (اختياري)
+          <input id="imageInput" type="file" accept="image/*" />
+          <small style="color: var(--muted); font-size: 11px;">أنواع مقبولة: JPG, PNG, GIF (أقل من 10MB)</small>
+        </label>
+        <div class="actions">
+          <button type="submit" class="btn primary">نشر</button>
+          <button type="button" id="clearBtn" class="btn ghost">تفريغ</button>
+        </div>
+        <p id="formHint" class="hint">نحن هنا لإسعادها فاجعل رسالتك تتألق!</p>
+      </form>
+    </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+  </html>

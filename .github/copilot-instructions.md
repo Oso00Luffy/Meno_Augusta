@@ -1,0 +1,7 @@
+- [x] Verify that the copilot-instructions.md file in the .github directory is created.
+- [x] Scaffold the Project
+  - Vite (vanilla TS) + PixiJS starfield + modal + local submit form.
+- [ ] Compile the Project
+  - Next: install dependencies and run dev server.
+- [ ] Ensure Documentation is Complete
+  - README.md created with run instructions.
