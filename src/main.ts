@@ -5,6 +5,108 @@ import { loadPosts, addPost, type Post } from './supabase';
 // ----- Load only user-created posts (no demo data) -----
 let posts: Post[] = [];
 
+// ----- Background Music Setup -----
+const backgroundMusic = document.getElementById('backgroundMusic') as HTMLAudioElement;
+const musicToggle = document.getElementById('musicToggle') as HTMLButtonElement;
+let musicEnabled = false;
+let userInteracted = false;
+
+// Music control functions
+function playMusic() {
+  if (backgroundMusic && userInteracted) {
+    backgroundMusic.volume = 0.3; // Set to 30% volume for ambient effect
+    backgroundMusic.play().then(() => {
+      musicEnabled = true;
+      updateMusicButton();
+      console.log('Background music started');
+    }).catch(error => {
+      console.log('Could not play music:', error);
+    });
+  }
+}
+
+function pauseMusic() {
+  if (backgroundMusic) {
+    backgroundMusic.pause();
+    musicEnabled = false;
+    updateMusicButton();
+    console.log('Background music paused');
+  }
+}
+
+function toggleMusic() {
+  userInteracted = true;
+  if (musicEnabled) {
+    pauseMusic();
+  } else {
+    playMusic();
+  }
+}
+
+function updateMusicButton() {
+  if (musicToggle) {
+    if (musicEnabled) {
+      musicToggle.textContent = '🎵';
+      musicToggle.classList.add('playing');
+      musicToggle.title = 'إيقاف الموسيقى';
+    } else {
+      musicToggle.textContent = '🎵';
+      musicToggle.classList.remove('playing');
+      musicToggle.title = 'تشغيل الموسيقى';
+    }
+  }
+}
+
+// Setup music controls
+if (musicToggle) {
+  musicToggle.addEventListener('click', toggleMusic);
+}
+
+// Music loading and error handling
+if (backgroundMusic) {
+  backgroundMusic.addEventListener('loadstart', () => {
+    console.log('Loading background music...');
+  });
+
+  backgroundMusic.addEventListener('canplaythrough', () => {
+    console.log('Background music ready to play');
+    updateMusicButton();
+  });
+
+  backgroundMusic.addEventListener('error', (e) => {
+    console.error('Error loading background music:', e);
+    if (musicToggle) {
+      musicToggle.style.display = 'none'; // Hide button if music fails to load
+    }
+  });
+
+  backgroundMusic.addEventListener('ended', () => {
+    // Music will loop automatically due to 'loop' attribute
+    console.log('Background music loop');
+  });
+}
+
+// Auto-start music on first user interaction
+function startMusicOnFirstInteraction() {
+  if (!userInteracted) {
+    userInteracted = true;
+    // Start music and show welcome
+    setTimeout(() => {
+      if (backgroundMusic && backgroundMusic.readyState >= 2) { // HAVE_CURRENT_DATA
+        playMusic();
+        console.log('🎵 Welcome to Meno Augusta! Music is now playing');
+      } else {
+        console.log('Welcome to Meno Augusta! ✨');
+      }
+    }, 500); // Small delay for better UX
+  }
+}
+
+// Listen for various user interactions to enable music
+['click', 'touchstart', 'keydown'].forEach(event => {
+  document.addEventListener(event, startMusicOnFirstInteraction, { once: true });
+});
+
 async function initializePosts() {
   try {
     console.log('Loading posts from Supabase...');
@@ -56,6 +158,24 @@ async function initPixiApp() {
 // Initialize PixiJS and continue with the rest of the app
 initPixiApp().then(({ app, stage }) => {
 app.stage.addChild(stage);
+
+// Mobile-friendly canvas interaction
+app.stage.eventMode = 'static';
+app.stage.hitArea = app.screen;
+
+// Add canvas click/tap handler for mobile-friendly star creation
+app.stage.on('pointertap', (event) => {
+  // Check if click was on empty space (not on a star)
+  const target = event.target;
+  if (target === app.stage) {
+    // Mobile-friendly: open the form sheet on canvas tap
+    console.log('Canvas tapped - opening form sheet');
+    const formSheet = document.getElementById('formSheet') as HTMLDivElement;
+    if (formSheet) {
+      formSheet.classList.add('open');
+    }
+  }
+});
 
 // Augusta-inspired star texture with golden glow
 function makeGlowTexture(size=100){
@@ -217,7 +337,35 @@ console.log('Form elements check:', {
 initializePosts().then(() => {
   // Render all loaded stars after posts are loaded
   renderAllStars();
+  
+  // Show welcome message with music info after everything is loaded
+  setTimeout(() => {
+    if (musicEnabled && backgroundMusic && !backgroundMusic.paused) {
+      showToast('🎵 مرحباً بك في مجرة الرسائل! الموسيقى تعزف الآن', 'success');
+    } else if (userInteracted) {
+      showToast('مرحباً بك في مجرة الرسائل! اضغط 🎵 لتشغيل الموسيقى', 'success');
+    }
+  }, 1000);
 });
+
+// Mobile-friendly: prevent form sheet from closing when tapping inside on mobile
+const isMobile = window.innerWidth <= 768;
+if (isMobile) {
+  // Add mobile-specific welcome message
+  console.log('Mobile device detected - optimized UI loaded');
+  
+  // Prevent accidental form closure on mobile
+  document.addEventListener('touchstart', (e) => {
+    const target = e.target as HTMLElement;
+    if (formSheet.classList.contains('open')) {
+      const inside = formSheet.contains(target) || (target.id === 'addBtnTop');
+      // On mobile, only close if user taps the close button or outside the sheet
+      if (!inside && !target.closest('.sheet')) {
+        formSheet.classList.remove('open');
+      }
+    }
+  });
+}
 
 addBtnTop.addEventListener('click', () => {
   console.log('Add button clicked'); // تتبع
@@ -455,15 +603,21 @@ const p1 = parallax?.querySelector('.p1') as HTMLDivElement | null;
 const p2 = parallax?.querySelector('.p2') as HTMLDivElement | null;
 const p3 = parallax?.querySelector('.p3') as HTMLDivElement | null;
 let mouseX = 0, mouseY = 0;
+
+// Mobile-friendly parallax - less intense on touch devices
+const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+const parallaxMultiplier = isTouchDevice ? 0.3 : 1; // Reduce parallax on mobile
+
 window.addEventListener('pointermove', (e) => {
   mouseX = (e.clientX / window.innerWidth) * 2 - 1;
   mouseY = (e.clientY / window.innerHeight) * 2 - 1;
 });
+
 app.ticker.add(() => {
   if (!p1 || !p2 || !p3) return;
-  p1.style.transform = `translate(${mouseX * -10}px, ${mouseY * -6}px)`;
-  p2.style.transform = `translate(${mouseX * 14}px, ${mouseY * 10}px)`;
-  p3.style.transform = `translate(${mouseX * 6}px, ${mouseY * 4}px)`;
+  p1.style.transform = `translate(${mouseX * -10 * parallaxMultiplier}px, ${mouseY * -6 * parallaxMultiplier}px)`;
+  p2.style.transform = `translate(${mouseX * 14 * parallaxMultiplier}px, ${mouseY * 10 * parallaxMultiplier}px)`;
+  p3.style.transform = `translate(${mouseX * 6 * parallaxMultiplier}px, ${mouseY * 4 * parallaxMultiplier}px)`;
 });
 
 function showToast(msg: string, type: 'success' | 'error' | 'warning' = 'success'){
@@ -494,10 +648,14 @@ function showToast(msg: string, type: 'success' | 'error' | 'warning' = 'success
   
   console.log('Toast classes:', toast.className); // تتبع
   
+  // Mobile-friendly: longer timeout for easier reading on mobile
+  const baseTimeout = type === 'error' ? 3000 : 1800;
+  const timeoutDuration = isTouchDevice ? baseTimeout + 1000 : baseTimeout;
+  
   setTimeout(() => {
     toast.classList.remove('show');
     console.log('Toast hidden'); // تتبع
-  }, type === 'error' ? 3000 : 1800); // أخطاء تظهر لفترة أطول
+  }, timeoutDuration);
 }
 
 }).catch(error => {

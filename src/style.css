@@ -35,6 +35,7 @@ body {
 .topbar { 
   position: fixed; top: 20px; left: 50%; transform: translateX(-50%); 
   display: flex; gap: 12px; align-items: center; z-index: 6; 
+  flex-wrap: wrap; justify-content: center;
 }
 
 .topbar span { 
@@ -47,6 +48,49 @@ body {
   color: var(--text-secondary);
   backdrop-filter: blur(12px);
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.topbar-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.music-btn {
+  background: rgba(26, 31, 46, 0.8);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  border-radius: 50%;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 18px;
+  transition: all 0.3s ease;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.music-btn:hover {
+  background: linear-gradient(135deg, rgba(212, 175, 55, 0.2), rgba(212, 175, 55, 0.1));
+  border-color: var(--accent-gold);
+  color: var(--accent-gold);
+  box-shadow: 0 6px 24px rgba(212, 175, 55, 0.15);
+  transform: translateY(-1px);
+}
+
+.music-btn.playing {
+  background: linear-gradient(135deg, var(--accent-gold), #e6c547);
+  color: var(--bg-deep);
+  border-color: var(--accent-gold);
+  animation: musicPulse 2s ease-in-out infinite;
+}
+
+@keyframes musicPulse {
+  0%, 100% { box-shadow: 0 4px 20px rgba(212, 175, 55, 0.3); }
+  50% { box-shadow: 0 6px 32px rgba(212, 175, 55, 0.5); }
 }
 
 .add-top { 
@@ -275,4 +319,279 @@ input[type="text"]:focus, textarea:focus {
 .btn.loading::after {
   content: "⏳";
   margin-inline-start: 4px;
+}
+
+/* ===== MOBILE-FRIENDLY RESPONSIVE DESIGN ===== */
+
+/* Tablet and smaller screens */
+@media (max-width: 768px) {
+  .topbar {
+    top: 12px;
+    left: 12px;
+    right: 12px;
+    transform: none;
+    flex-direction: column;
+    gap: 8px;
+    align-items: stretch;
+  }
+
+  .topbar span {
+    text-align: center;
+    font-size: 13px;
+    padding: 8px 12px;
+  }
+
+  .topbar-controls {
+    justify-content: center;
+    gap: 12px;
+  }
+
+  .music-btn {
+    width: 40px;
+    height: 40px;
+    font-size: 16px;
+  }
+
+  .add-top {
+    padding: 12px 16px;
+    font-size: 14px;
+    border-radius: 12px;
+    flex: 1;
+  }
+
+  /* Adjust planets for smaller screens */
+  .planet.p1 {
+    width: 200px;
+    height: 200px;
+    left: -80px;
+    top: 15%;
+  }
+
+  .planet.p2 {
+    width: 150px;
+    height: 150px;
+    right: -60px;
+    top: 70%;
+  }
+
+  .planet.p3 {
+    width: 120px;
+    height: 120px;
+    left: 70%;
+    top: 25%;
+  }
+
+  /* Modal adjustments */
+  .modal {
+    padding: 12px;
+    align-items: flex-start;
+    padding-top: 60px;
+  }
+
+  .card {
+    width: 100%;
+    max-height: calc(100vh - 120px);
+    padding: 20px;
+    border-radius: 16px;
+  }
+
+  .card-title {
+    font-size: 1.3rem;
+    margin-bottom: 16px;
+  }
+
+  .card img {
+    border-radius: 12px;
+    margin: 12px 0;
+  }
+
+  /* Sheet (form) adjustments */
+  .sheet {
+    width: 100%;
+    border-radius: 0;
+    border-inline-end: none;
+    border-top: 1px solid var(--border);
+    inset-inline-start: 0;
+    top: auto;
+    bottom: 0;
+    height: auto;
+    max-height: 85vh;
+    transform: translateY(102%);
+    border-radius: 20px 20px 0 0;
+    padding: 16px;
+  }
+
+  .sheet.open {
+    transform: translateY(0);
+  }
+
+  .sheet-header {
+    padding-bottom: 12px;
+    margin-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .sheet-header h4 {
+    font-size: 1.2rem;
+    margin: 0;
+  }
+
+  /* Form elements for mobile */
+  #starForm {
+    gap: 14px;
+  }
+
+  label {
+    font-size: 13px;
+  }
+
+  input[type="text"], textarea, input[type="file"] {
+    padding: 14px 16px;
+    font-size: 16px; /* Prevents zoom on iOS */
+    border-radius: 12px;
+  }
+
+  textarea {
+    resize: vertical;
+    min-height: 100px;
+  }
+
+  .actions {
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 12px;
+  }
+
+  .btn {
+    padding: 14px 20px;
+    font-size: 15px;
+    text-align: center;
+  }
+
+  /* Toast positioning for mobile */
+  .toast {
+    inset-inline-end: 12px;
+    inset-inline-start: 12px;
+    top: 80px;
+    font-size: 14px;
+    text-align: center;
+  }
+}
+
+/* Mobile phones */
+@media (max-width: 480px) {
+  .topbar {
+    top: 8px;
+    left: 8px;
+    right: 8px;
+  }
+
+  .topbar span {
+    font-size: 12px;
+    padding: 6px 10px;
+  }
+
+  .add-top {
+    padding: 10px 14px;
+    font-size: 13px;
+  }
+
+  /* Hide planets on very small screens for better performance */
+  .planet.p2, .planet.p3 {
+    display: none;
+  }
+
+  .planet.p1 {
+    width: 150px;
+    height: 150px;
+    opacity: 0.3;
+  }
+
+  .modal {
+    padding: 8px;
+    padding-top: 80px;
+  }
+
+  .card {
+    padding: 16px;
+    border-radius: 12px;
+    max-height: calc(100vh - 160px);
+  }
+
+  .card-title {
+    font-size: 1.2rem;
+  }
+
+  .close {
+    font-size: 20px;
+    top: 8px;
+    right: 8px;
+  }
+
+  .sheet {
+    padding: 12px;
+    max-height: 90vh;
+  }
+
+  input[type="text"], textarea {
+    padding: 12px 14px;
+  }
+
+  .btn {
+    padding: 12px 16px;
+    font-size: 14px;
+  }
+}
+
+/* Touch-friendly improvements */
+@media (hover: none) and (pointer: coarse) {
+  /* Increase touch targets */
+  .add-top, .btn, .icon-btn, .close {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Remove hover effects on touch devices */
+  .add-top:hover, .btn:hover, .icon-btn:hover, .close:hover {
+    transform: none;
+    box-shadow: inherit;
+  }
+
+  /* Add active states for touch feedback */
+  .add-top:active {
+    transform: scale(0.95);
+    background: var(--accent-gold);
+  }
+
+  .btn:active {
+    transform: scale(0.95);
+  }
+
+  .close:active, .icon-btn:active {
+    color: var(--accent-gold);
+  }
+}
+
+/* Landscape mobile orientation */
+@media (max-width: 768px) and (orientation: landscape) {
+  .modal {
+    padding-top: 20px;
+  }
+
+  .card {
+    max-height: calc(100vh - 40px);
+  }
+
+  .sheet {
+    max-height: 95vh;
+  }
+}
+
+/* High DPI displays */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+  /* Ensure crisp rendering on retina displays */
+  .card, .sheet, .btn, input, textarea {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
 }

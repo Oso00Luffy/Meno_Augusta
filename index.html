@@ -2,7 +2,11 @@
 <html lang="ar" dir="rtl">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="theme-color" content="#0a0d1a" />
     <title>مجرة الرسائل</title>
   <link rel="icon" type="image/svg+xml" href="icon.svg" />
   </head>
@@ -14,8 +18,18 @@
     </div>
     <div class="topbar">
       <span>مرحبًا بك في مجرّة الرسائل</span>
-      <button id="addBtnTop" class="add-top" title="أضف نجمة">+ أضف نجمة</button>
+      <div class="topbar-controls">
+        <button id="musicToggle" class="music-btn" title="تشغيل/إيقاف الموسيقى">🎵</button>
+        <button id="addBtnTop" class="add-top" title="أضف نجمة">+ أضف نجمة</button>
+      </div>
     </div>
+    
+    <!-- Background Music -->
+    <audio id="backgroundMusic" loop preload="auto">
+      <source src="/background-music.mp3" type="audio/mpeg">
+      Your browser does not support the audio element.
+    </audio>
+    
     <div id="app"></div>
 
     <!-- مودال عرض الرسالة -->

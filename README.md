@@ -6,10 +6,21 @@ A beautiful interactive starfield application inspired by Augusta from Wuthering
 
 - **Interactive Starfield**: Click anywhere to create beautiful Augusta-inspired golden stars
 - **Rich Content**: Add titles, text, and images to your star posts
+- **Ambient Music**: Beautiful background music creates an immersive cosmic experience
 - **Elegant Design**: Wuthering Waves Augusta-inspired color palette and aesthetics
 - **Persistent Cloud Storage**: Your creations are saved in Supabase and accessible from anywhere
 - **Cross-Device Sync**: View your stars on any device, anywhere in the world
+- **Mobile-Friendly**: Optimized for phones, tablets, and desktop devices
 - **Responsive UI**: Beautiful modal interface for creating and viewing posts
+
+## Setting Up Background Music
+
+To add your custom background music:
+
+1. **Add Music File**: Copy your music file to `public/background-music.mp3`
+2. **See Setup Guide**: Check `MUSIC_SETUP.md` for detailed instructions
+3. **Auto-Play**: Music starts automatically on first user interaction
+4. **Controls**: Use the 🎵 button to toggle music on/off
 
 ## Setting Up Cloud Storage (Supabase)
 
