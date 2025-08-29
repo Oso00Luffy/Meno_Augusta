@@ -85,6 +85,7 @@ The built files will be in the `dist` directory, ready for deployment to Vercel,
 - **TypeScript**: Type-safe development
 - **Vite**: Fast build tool and development server
 - **Supabase**: Cloud database for persistent storage
+- **Vercel Analytics**: User behavior and performance tracking
 - **CSS3**: Modern styling with Augusta-inspired themes
 
 ## Deployment

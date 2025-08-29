@@ -353,10 +353,20 @@ input[type="text"]:focus, textarea:focus {
   }
 
   .add-top {
-    padding: 12px 16px;
-    font-size: 14px;
+    padding: 14px 20px;
+    font-size: 15px;
     border-radius: 12px;
     flex: 1;
+    font-weight: 500;
+    background: linear-gradient(135deg, var(--accent-gold), #e6c547);
+    color: var(--bg-deep);
+    border-color: var(--accent-gold);
+    box-shadow: 0 4px 16px rgba(212, 175, 55, 0.3);
+  }
+
+  .add-top:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(212, 175, 55, 0.4);
   }
 
   /* Adjust planets for smaller screens */

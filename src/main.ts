@@ -1,6 +1,20 @@
 import './style.css';
 import * as PIXI from 'pixi.js';
 import { loadPosts, addPost, type Post } from './supabase';
+import { inject, track } from '@vercel/analytics';
+
+// Initialize Vercel Analytics
+inject();
+
+// Analytics helper function
+function trackEvent(eventName: string, properties?: Record<string, any>) {
+  try {
+    track(eventName, properties);
+    console.log('Analytics event tracked:', eventName, properties);
+  } catch (error) {
+    console.log('Analytics tracking failed:', error);
+  }
+}
 
 // ----- Load only user-created posts (no demo data) -----
 let posts: Post[] = [];
@@ -18,6 +32,7 @@ function playMusic() {
     backgroundMusic.play().then(() => {
       musicEnabled = true;
       updateMusicButton();
+      trackEvent('music_started', { source: 'user_interaction' });
       console.log('Background music started');
     }).catch(error => {
       console.log('Could not play music:', error);
@@ -30,6 +45,7 @@ function pauseMusic() {
     backgroundMusic.pause();
     musicEnabled = false;
     updateMusicButton();
+    trackEvent('music_paused', { source: 'user_interaction' });
     console.log('Background music paused');
   }
 }
@@ -163,16 +179,22 @@ app.stage.addChild(stage);
 app.stage.eventMode = 'static';
 app.stage.hitArea = app.screen;
 
-// Add canvas click/tap handler for mobile-friendly star creation
+// Add canvas click/tap handler - disabled on mobile to prevent accidental triggers
 app.stage.on('pointertap', (event) => {
   // Check if click was on empty space (not on a star)
   const target = event.target;
   if (target === app.stage) {
-    // Mobile-friendly: open the form sheet on canvas tap
-    console.log('Canvas tapped - opening form sheet');
-    const formSheet = document.getElementById('formSheet') as HTMLDivElement;
-    if (formSheet) {
-      formSheet.classList.add('open');
+    // Only enable canvas tap on desktop to avoid mobile UX issues
+    if (!isTouchDevice) {
+      console.log('Canvas clicked - opening form sheet');
+      trackEvent('canvas_tapped', { device_type: 'mouse' });
+      const formSheet = document.getElementById('formSheet') as HTMLDivElement;
+      if (formSheet) {
+        formSheet.classList.add('open');
+      }
+    } else {
+      // On mobile, just show a helpful message
+      console.log('Canvas tapped on mobile - use the button to add stars');
     }
   }
 });
@@ -298,6 +320,13 @@ function openModal(msg: Post){
     mImg.style.display = 'none';
   }
   
+  // Track star viewing
+  trackEvent('star_viewed', {
+    has_image: !!msg.image,
+    title_length: msg.title.length,
+    text_length: msg.text.length
+  });
+  
   modal.style.display = 'flex';
 }
 function closeModal(){ 
@@ -338,6 +367,14 @@ initializePosts().then(() => {
   // Render all loaded stars after posts are loaded
   renderAllStars();
   
+  // Track app initialization
+  trackEvent('app_initialized', {
+    stars_count: posts.length,
+    device_type: isTouchDevice ? 'touch' : 'desktop',
+    screen_width: window.innerWidth,
+    screen_height: window.innerHeight
+  });
+  
   // Show welcome message with music info after everything is loaded
   setTimeout(() => {
     if (musicEnabled && backgroundMusic && !backgroundMusic.paused) {
@@ -354,6 +391,11 @@ if (isMobile) {
   // Add mobile-specific welcome message
   console.log('Mobile device detected - optimized UI loaded');
   
+  // Show mobile-specific welcome message
+  setTimeout(() => {
+    showToast('اضغط "أضف نجمة" لإنشاء نجمة جديدة! ✨', 'success');
+  }, 2000);
+  
   // Prevent accidental form closure on mobile
   document.addEventListener('touchstart', (e) => {
     const target = e.target as HTMLElement;
@@ -369,6 +411,7 @@ if (isMobile) {
 
 addBtnTop.addEventListener('click', () => {
   console.log('Add button clicked'); // تتبع
+  trackEvent('add_star_button_clicked', { source: 'top_button' });
   formSheet.classList.add('open');
 });
 sheetClose.addEventListener('click', () => {
@@ -492,6 +535,15 @@ starForm.addEventListener('submit', async (e) => {
         starForm.reset();
         formSheet.classList.remove('open');
         showToast('تم النشر بنجاح! ✨');
+        
+        // Track successful star creation
+        trackEvent('star_created', {
+          has_image: !!savedPost.image,
+          title_length: savedPost.title.length,
+          text_length: savedPost.text.length,
+          device_type: isTouchDevice ? 'touch' : 'desktop'
+        });
+        
         console.log('Post published successfully to Supabase!'); // تتبع
       } else {
         throw new Error('Failed to save post to Supabase');
