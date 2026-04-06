@@ -319,10 +319,69 @@ function makeGlowTexture(size=100){
 }
 const starTexture = makeGlowTexture(100);
 
-type Star = PIXI.Sprite & { vx:number; vy:number; wobble:number; w:number; msg:Post; __oldScale?:number; __oldTint?:number };
+type Star = PIXI.Sprite & {
+  vx:number;
+  vy:number;
+  wobble:number;
+  w:number;
+  msg:Post;
+  dragging?: boolean;
+  dragOffsetX?: number;
+  dragOffsetY?: number;
+  dragLastX?: number;
+  dragLastY?: number;
+  dragLastTime?: number;
+  dragMoved?: boolean;
+  dragStartX?: number;
+  dragStartY?: number;
+  blockTapUntil?: number;
+  __oldScale?:number;
+  __oldTint?:number;
+};
 const stars: Star[] = [] as unknown as Star[];
 const W = () => app.renderer.width; const H = () => app.renderer.height;
 function rand(a:number,b:number){ return a + Math.random()*(b-a) }
+let activeDragStar: Star | null = null;
+
+function endStarDrag() {
+  if (!activeDragStar) return;
+  const sp = activeDragStar;
+  activeDragStar = null;
+  sp.dragging = false;
+  sp.cursor = 'pointer';
+  if (sp.dragMoved) {
+    sp.blockTapUntil = performance.now() + 220;
+  }
+}
+
+app.stage.on('globalpointermove', (event: PIXI.FederatedPointerEvent) => {
+  if (!activeDragStar) return;
+
+  const sp = activeDragStar;
+  const now = performance.now();
+  const dt = Math.max(1, now - (sp.dragLastTime ?? now));
+  const nextX = event.global.x - (sp.dragOffsetX ?? 0);
+  const nextY = event.global.y - (sp.dragOffsetY ?? 0);
+
+  sp.vx = ((nextX - (sp.dragLastX ?? sp.x)) / dt) * 16;
+  sp.vy = ((nextY - (sp.dragLastY ?? sp.y)) / dt) * 16;
+
+  sp.x = nextX;
+  sp.y = nextY;
+
+  const movedDistance = Math.hypot(
+    sp.x - (sp.dragStartX ?? sp.x),
+    sp.y - (sp.dragStartY ?? sp.y)
+  );
+  sp.dragMoved = movedDistance > 8;
+  sp.dragLastX = sp.x;
+  sp.dragLastY = sp.y;
+  sp.dragLastTime = now;
+});
+
+app.stage.on('pointerup', endStarDrag);
+app.stage.on('pointerupoutside', endStarDrag);
+app.stage.on('pointercancel', endStarDrag);
 
 function addStar(msg: Post){
   const sp = new PIXI.Sprite(starTexture) as Star;
@@ -338,19 +397,43 @@ function addStar(msg: Post){
   sp.vy = rand(-0.2, 0.2) || -0.1;
   sp.wobble = rand(0, Math.PI*2); sp.w = rand(0.001, 0.005); // Subtle pulse
   sp.eventMode = 'static'; sp.cursor = 'pointer'; sp.msg = msg;
+  sp.dragging = false;
+  sp.blockTapUntil = 0;
   
   // Augusta-style hover effects
   sp.on('pointerover', () => { 
+    if (sp.dragging) return;
     sp.__oldScale = sp.scale.x; 
     sp.__oldTint = sp.tint as number; 
     sp.scale.set(sp.scale.x*1.5); 
     sp.tint = 0xffffff; // Bright white on hover
   });
   sp.on('pointerout', () => { 
+    if (sp.dragging) return;
     sp.scale.set(sp.__oldScale || scale); 
     sp.tint = (sp.__oldTint || 0xffd700) as any; 
   });
-  sp.on('pointertap', () => openModal(sp.msg));
+  sp.on('pointerdown', (event: PIXI.FederatedPointerEvent) => {
+    activeDragStar = sp;
+    sp.dragging = true;
+    sp.dragMoved = false;
+    sp.dragOffsetX = event.global.x - sp.x;
+    sp.dragOffsetY = event.global.y - sp.y;
+    sp.dragStartX = sp.x;
+    sp.dragStartY = sp.y;
+    sp.dragLastX = sp.x;
+    sp.dragLastY = sp.y;
+    sp.dragLastTime = performance.now();
+    sp.vx = 0;
+    sp.vy = 0;
+    sp.cursor = 'grabbing';
+    event.stopPropagation();
+  });
+  sp.on('pointertap', () => {
+    if ((sp.blockTapUntil ?? 0) > performance.now()) return;
+    if (sp.dragMoved) return;
+    openModal(sp.msg);
+  });
   
   stage.addChild(sp);
   stars.push(sp);
@@ -735,19 +818,41 @@ async function fileToDataUrl(file: File, maxDim=1200, quality=0.85): Promise<str
 app.ticker.add((ticker: PIXI.Ticker) => {
   const delta = ticker.deltaTime as number;
   const w = W(), h = H();
+  const margin = 18;
+  const dragFriction = 0.985;
+  const bounce = 0.72;
   for (const sp of stars) {
     sp.wobble += sp.w * delta;
-    sp.x += sp.vx * delta + Math.cos(sp.wobble) * 0.05 * delta;
-    sp.y += sp.vy * delta + Math.sin(sp.wobble) * 0.05 * delta;
+
+    if (!sp.dragging) {
+      sp.vx += Math.cos(sp.wobble) * 0.003 * delta;
+      sp.vy += Math.sin(sp.wobble) * 0.003 * delta;
+      sp.x += sp.vx * delta;
+      sp.y += sp.vy * delta;
+      sp.vx *= dragFriction;
+      sp.vy *= dragFriction;
+
+      if (sp.x < margin) {
+        sp.x = margin;
+        sp.vx = Math.abs(sp.vx) * bounce;
+      } else if (sp.x > w - margin) {
+        sp.x = w - margin;
+        sp.vx = -Math.abs(sp.vx) * bounce;
+      }
+
+      if (sp.y < margin) {
+        sp.y = margin;
+        sp.vy = Math.abs(sp.vy) * bounce;
+      } else if (sp.y > h - margin) {
+        sp.y = h - margin;
+        sp.vy = -Math.abs(sp.vy) * bounce;
+      }
+    }
+
     // twinkle
     const base = (sp as any).baseAlpha ?? 0.8;
     const tw = 0.2 * Math.sin(sp.wobble * 1.5);
     sp.alpha = Math.max(0.4, Math.min(1, base + tw));
-    const pad = 120;
-    if (sp.x < -pad) sp.x = w + pad;
-    if (sp.x > w + pad) sp.x = -pad;
-    if (sp.y < -pad) sp.y = h + pad;
-    if (sp.y > h + pad) sp.y = -pad;
   }
 });
 
