@@ -18,6 +18,100 @@ function trackEvent(eventName: string, properties?: Record<string, any>) {
 
 // ----- Load only user-created posts (no demo data) -----
 let posts: Post[] = [];
+const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const heroBanner = document.getElementById('heroBanner') as HTMLElement | null;
+const heroCopy = heroBanner?.querySelector('p') as HTMLParagraphElement | null;
+
+function refreshHeroCopy() {
+  if (!heroCopy) {
+    return;
+  }
+
+  if (posts.length === 0) {
+    heroCopy.textContent = 'اكتب رسالة، أضف صورة، وشاهدها تتحول إلى نجمة حية داخل السماء.';
+    return;
+  }
+
+  heroCopy.textContent = `هناك ${posts.length} نجمة مضيئة حتى الآن. أضف أمنية جديدة لتزيد السماء بريقًا.`;
+}
+
+function celebratePublish() {
+  if (prefersReducedMotion) {
+    return;
+  }
+
+  const particleCount = 18;
+  const originX = window.innerWidth * 0.5;
+  const originY = 116;
+  const colors = ['#ffffff', '#d4af37', '#fff1bf', '#4a9eff'];
+
+  for (let i = 0; i < particleCount; i += 1) {
+    const particle = document.createElement('span');
+    const size = 8 + Math.random() * 8;
+    const angle = (Math.PI * 2 * i) / particleCount + Math.random() * 0.35;
+    const distance = 90 + Math.random() * 160;
+    const driftX = Math.cos(angle) * distance;
+    const driftY = Math.sin(angle) * distance - 40;
+    const color = colors[i % colors.length];
+
+    particle.className = 'burst-particle';
+    particle.style.left = `${originX}px`;
+    particle.style.top = `${originY}px`;
+    particle.style.width = `${size}px`;
+    particle.style.height = `${size}px`;
+    particle.style.background = `radial-gradient(circle, ${color} 0%, rgba(212, 175, 55, 0.8) 40%, rgba(212, 175, 55, 0) 75%)`;
+
+    document.body.appendChild(particle);
+
+    const animation = particle.animate(
+      [
+        {
+          transform: 'translate(-50%, -50%) scale(0.7)',
+          opacity: 1,
+        },
+        {
+          transform: `translate(calc(-50% + ${driftX}px), calc(-50% + ${driftY}px)) scale(0)`,
+          opacity: 0,
+        },
+      ],
+      {
+        duration: 1000 + Math.random() * 400,
+        easing: 'cubic-bezier(0.18, 0.9, 0.2, 1)',
+        fill: 'forwards',
+      }
+    );
+
+    animation.onfinish = () => particle.remove();
+  }
+}
+
+function getSupabaseFailureMessage(error: unknown): string {
+  const rawMessage = error instanceof Error
+    ? error.message
+    : typeof error === 'string'
+      ? error
+      : JSON.stringify(error);
+
+  const normalizedMessage = rawMessage.toLowerCase();
+
+  if (normalizedMessage.includes('relation "posts" does not exist')) {
+    return 'جدول posts غير موجود في Supabase. شغّل ملف supabase-schema.sql على المشروع الجديد ثم أعد المحاولة.';
+  }
+
+  if (normalizedMessage.includes('row-level security') || normalizedMessage.includes('violates row level security policy')) {
+    return 'سياسة RLS تمنع الحفظ. تأكد من تشغيل supabase-schema.sql كاملًا على المشروع الجديد.';
+  }
+
+  if (normalizedMessage.includes('jwt') || normalizedMessage.includes('invalid api key') || normalizedMessage.includes('unauthorized')) {
+    return 'مفتاح Supabase أو الرابط غير صحيحين، أو لم يتم إعادة تشغيل/نشر الموقع بعد التحديث.';
+  }
+
+  if (normalizedMessage.includes('network error') || normalizedMessage.includes('failed to fetch')) {
+    return 'تعذر الوصول إلى Supabase. تحقق من الرابط والمفتاح ثم أعد نشر الموقع.';
+  }
+
+  return rawMessage || 'حدث خطأ غير معروف في Supabase';
+}
 
 // ----- Background Music Setup -----
 const backgroundMusic = document.getElementById('backgroundMusic') as HTMLAudioElement;
@@ -128,10 +222,12 @@ async function initializePosts() {
     console.log('Loading posts from Supabase...');
     posts = await loadPosts();
     console.log('Loaded user posts:', posts.length);
+    refreshHeroCopy();
   } catch (error) {
     console.error('Failed to load posts from Supabase:', error);
     console.log('Starting with empty posts array');
     posts = [];
+    refreshHeroCopy();
   }
 }
 
@@ -527,30 +623,42 @@ starForm.addEventListener('submit', async (e) => {
     console.log('Saving post to Supabase...'); // تتبع
     
     try {
-      const savedPost = await addPost(newPost);
+      const saveResult = await addPost(newPost);
+      const savedPost = saveResult.post;
       
       if (savedPost) {
         posts.push(savedPost);
         addStar(savedPost);
+        celebratePublish();
         starForm.reset();
         formSheet.classList.remove('open');
-        showToast('تم النشر بنجاح! ✨');
+        if (saveResult.savedToCloud) {
+          showToast('تم النشر بنجاح! ✨');
+        } else {
+          const fallbackHint = saveResult.fallbackReason
+            ? getSupabaseFailureMessage(saveResult.fallbackReason)
+            : 'تعذر الاتصال بقاعدة البيانات';
+          showToast(`تم حفظ الرسالة محلياً فقط: ${fallbackHint}`, 'warning');
+          console.warn('Saved locally instead of Supabase:', saveResult.fallbackReason);
+        }
+        refreshHeroCopy();
         
         // Track successful star creation
         trackEvent('star_created', {
           has_image: !!savedPost.image,
           title_length: savedPost.title.length,
           text_length: savedPost.text.length,
-          device_type: isTouchDevice ? 'touch' : 'desktop'
+          device_type: isTouchDevice ? 'touch' : 'desktop',
+          saved_to_cloud: saveResult.savedToCloud
         });
         
-        console.log('Post published successfully to Supabase!'); // تتبع
+        console.log('Post published:', saveResult.savedToCloud ? 'Supabase' : 'local fallback'); // تتبع
       } else {
         throw new Error('Failed to save post to Supabase');
       }
     } catch (supabaseError) {
       console.error('Supabase error:', supabaseError);
-      showToast('خطأ في حفظ البيانات على الخادم، يرجى المحاولة مرة أخرى', 'error');
+      showToast(`خطأ في حفظ البيانات على الخادم: ${getSupabaseFailureMessage(supabaseError)}`, 'error');
     }
     
   } catch (error) {

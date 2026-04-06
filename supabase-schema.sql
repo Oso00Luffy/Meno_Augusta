@@ -1,5 +1,8 @@
 -- SQL Schema for Meno Augusta Supabase Database
--- Run this in your Supabase SQL editor to set up the posts table
+-- Run this in your Supabase SQL editor for a fresh Supabase project
+
+-- Required for gen_random_uuid()
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 -- Create the posts table
 CREATE TABLE posts (

@@ -7,6 +7,9 @@ const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'YOUR_SUPABASE_ANO
 
 // Check if Supabase is properly configured
 const isSupabaseConfigured = supabaseUrl !== 'YOUR_SUPABASE_URL' && supabaseKey !== 'YOUR_SUPABASE_ANON_KEY'
+const LS_KEY = 'meno-augusta.posts.v2'
+const memoryPosts = new Map<string, Post>()
+const LOCAL_STORAGE_BYTE_LIMIT = 2.5 * 1024 * 1024
 
 export const supabase = createClient(supabaseUrl, supabaseKey)
 
@@ -21,10 +24,165 @@ export interface Post {
   created_at?: string
 }
 
+export interface AddPostResult {
+  post: Post
+  savedToCloud: boolean
+  fallbackReason?: string
+}
+
+function extractSupabaseErrorReason(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message
+  }
+
+  if (typeof error === 'string') {
+    return error
+  }
+
+  if (error && typeof error === 'object') {
+    const errorObj = error as Record<string, unknown>
+    const message = typeof errorObj.message === 'string' ? errorObj.message : ''
+    const details = typeof errorObj.details === 'string' ? errorObj.details : ''
+    const hint = typeof errorObj.hint === 'string' ? errorObj.hint : ''
+    const code = typeof errorObj.code === 'string' ? errorObj.code : ''
+    const status = typeof errorObj.status === 'number' ? `status=${errorObj.status}` : ''
+
+    const parts = [message, details, hint, code, status].filter(Boolean)
+    if (parts.length > 0) {
+      return parts.join(' | ')
+    }
+
+    try {
+      return JSON.stringify(errorObj)
+    } catch {
+      return 'Supabase returned an unknown object error'
+    }
+  }
+
+  return 'Unknown Supabase error'
+}
+
+function isLocalStorageAvailable(): boolean {
+  try {
+    const test = '__meno_augusta_ls_test__'
+    localStorage.setItem(test, test)
+    localStorage.removeItem(test)
+    return true
+  } catch {
+    return false
+  }
+}
+
+function loadLocalPosts(): Post[] {
+  if (!isLocalStorageAvailable()) {
+    return Array.from(memoryPosts.values())
+  }
+
+  try {
+    const data = localStorage.getItem(LS_KEY)
+    if (!data) {
+      return Array.from(memoryPosts.values())
+    }
+
+    const parsed = JSON.parse(data)
+    if (!Array.isArray(parsed)) {
+      console.warn('Local post cache is invalid, resetting it.')
+      return Array.from(memoryPosts.values())
+    }
+
+    return parsed as Post[]
+  } catch (error) {
+    console.error('Failed to load local posts:', error)
+    return Array.from(memoryPosts.values())
+  }
+}
+
+function saveLocalPosts(posts: Post[]): void {
+  if (!isLocalStorageAvailable()) {
+    memoryPosts.clear()
+    for (const post of posts) {
+      if (post.id) {
+        memoryPosts.set(post.id, post)
+      }
+    }
+    return
+  }
+
+  try {
+    const attempts = [
+      posts,
+      posts.slice(-100).map((post, index) => index < 20 ? post : { ...post, image: undefined }),
+      posts.slice(-50).map((post, index) => index < 10 ? post : { ...post, image: undefined }),
+      posts.slice(-20).map(post => ({ ...post, image: undefined })),
+      posts.slice(-5).map(post => ({ ...post, image: undefined })),
+      posts.slice(-1).map(post => ({ ...post, image: undefined })),
+    ]
+
+    for (const candidatePosts of attempts) {
+      const serialized = JSON.stringify(candidatePosts)
+
+      if (serialized.length > LOCAL_STORAGE_BYTE_LIMIT) {
+        continue
+      }
+
+      try {
+        localStorage.setItem(LS_KEY, serialized)
+        return
+      } catch (error) {
+        if (!(error instanceof Error) || error.name !== 'QuotaExceededError') {
+          throw error
+        }
+      }
+    }
+
+    memoryPosts.clear()
+    for (const post of posts.slice(-1)) {
+      if (post.id) {
+        memoryPosts.set(post.id, post)
+      }
+    }
+  } catch (error) {
+    console.error('Failed to save local posts:', error)
+
+    if (error instanceof Error && error.name === 'QuotaExceededError') {
+      memoryPosts.clear()
+      for (const post of posts.slice(-1)) {
+        if (post.id) {
+          memoryPosts.set(post.id, post)
+        }
+      }
+    }
+  }
+}
+
+function createLocalPost(post: Omit<Post, 'id' | 'created_at'>): Post {
+  const savedPostId = crypto.randomUUID()
+  const savedPost: Post = {
+    ...post,
+    id: savedPostId,
+    created_at: new Date().toISOString(),
+  }
+
+  const posts = loadLocalPosts()
+  posts.unshift(savedPost)
+  try {
+    saveLocalPosts(posts)
+  } catch (error) {
+    console.error('Unable to persist local post, keeping it in memory only:', error)
+    memoryPosts.set(savedPostId, savedPost)
+  }
+
+  return savedPost
+}
+
+function syncLocalPosts(posts: Post[]): void {
+  saveLocalPosts(posts)
+}
+
 // Supabase database functions
 export async function savePosts(posts: Post[]): Promise<void> {
   if (!isSupabaseConfigured) {
-    console.warn('Supabase not configured. Please check SUPABASE_SETUP.md for instructions.')
+    syncLocalPosts(posts)
     return
   }
 
@@ -59,14 +217,19 @@ export async function savePosts(posts: Post[]): Promise<void> {
     console.log('Posts saved to Supabase successfully!')
   } catch (error) {
     console.error('Failed to save posts:', error)
+    syncLocalPosts(posts)
     throw error
   }
 }
 
 export async function loadPosts(): Promise<Post[]> {
   if (!isSupabaseConfigured) {
-    console.warn('Supabase not configured. Please check SUPABASE_SETUP.md for instructions.')
-    return []
+    console.warn('Supabase is unavailable. Falling back to local storage.')
+    return loadLocalPosts().sort((a, b) => {
+      const left = new Date(b.created_at ?? 0).getTime()
+      const right = new Date(a.created_at ?? 0).getTime()
+      return left - right
+    })
   }
 
   try {
@@ -83,13 +246,18 @@ export async function loadPosts(): Promise<Post[]> {
     return data || []
   } catch (error) {
     console.error('Failed to load posts:', error)
-    return []
+    return loadLocalPosts()
   }
 }
 
-export async function addPost(post: Omit<Post, 'id' | 'created_at'>): Promise<Post | null> {
+export async function addPost(post: Omit<Post, 'id' | 'created_at'>): Promise<AddPostResult> {
   if (!isSupabaseConfigured) {
-    throw new Error('Supabase not configured. Please set up your environment variables. See SUPABASE_SETUP.md for instructions.')
+    console.warn('Supabase is unavailable. Saving post locally instead.')
+    return {
+      post: createLocalPost(post),
+      savedToCloud: false,
+      fallbackReason: 'Supabase is not configured.',
+    }
   }
 
   try {
@@ -111,9 +279,17 @@ export async function addPost(post: Omit<Post, 'id' | 'created_at'>): Promise<Po
     }
 
     console.log('Post added to Supabase successfully!')
-    return data
+    return {
+      post: data,
+      savedToCloud: true,
+    }
   } catch (error) {
     console.error('Failed to add post:', error)
-    throw error
+    const reason = extractSupabaseErrorReason(error)
+    return {
+      post: createLocalPost(post),
+      savedToCloud: false,
+      fallbackReason: reason,
+    }
   }
 }

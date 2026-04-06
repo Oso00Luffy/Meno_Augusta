@@ -28,12 +28,14 @@ To enable cloud storage and make your stars accessible from anywhere:
 
 1. **Follow the Setup Guide**: See `SUPABASE_SETUP.md` for detailed instructions
 2. **Quick Setup**: 
-   - Create a Supabase project at [supabase.com](https://supabase.com)
+   - Create a fresh Supabase project at [supabase.com](https://supabase.com)
    - Run the SQL schema from `supabase-schema.sql`
-   - Add your credentials to `.env` file
+   - Copy `.env.example` to `.env` and add your new credentials
    - Restart the dev server
 
-Without Supabase setup, the app will show connection errors but still work offline.
+Without Supabase setup, the app will still work offline using local storage.
+
+If Supabase breaks later, the app falls back to local storage automatically, so the birthday page keeps working while you create a fresh project.
 
 ## Running the Project
 

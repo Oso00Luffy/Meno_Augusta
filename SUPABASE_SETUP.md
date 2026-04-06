@@ -2,6 +2,8 @@
 
 Follow these steps to set up Supabase for cloud storage and make your stars accessible from anywhere!
 
+If your old Supabase project is broken, create a fresh one and use the new env template in this repo. The app will keep working while you switch over because it falls back to local storage automatically.
+
 ## Step 1: Create a Supabase Project
 
 1. Go to [supabase.com](https://supabase.com)
@@ -33,8 +35,8 @@ Follow these steps to set up Supabase for cloud storage and make your stars acce
 
 ## Step 4: Configure Your Environment Variables
 
-1. Open the `.env` file in your project root
-2. Replace the placeholder values with your actual Supabase credentials:
+1. Copy `.env.example` to `.env` in your project root
+2. Replace the placeholder values with your new Supabase credentials:
 
 ```env
 VITE_SUPABASE_URL=https://your-project-id.supabase.co
@@ -81,6 +83,11 @@ VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 - Make sure you've run the database schema
 - Verify your Supabase project is active
 
+**Supabase is down or reset**
+- The app should still work with local storage automatically
+- You can create a fresh Supabase project later and point the `.env` file to it
+- Once the new project is ready, run `supabase-schema.sql` again
+
 **Error: "Insert" policy violated**
 - Make sure you've run the RLS policies from the schema
 - Check that the `posts` table exists
@@ -99,9 +106,10 @@ VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 ### Deployment:
 
 When deploying to Vercel/Netlify:
-1. Add your environment variables in the hosting platform's dashboard
-2. The app will automatically use cloud storage instead of localStorage
-3. Your stars will persist forever! ✨
+1. Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in the hosting platform's environment settings
+2. Keep the same values you used in `.env`
+3. The app will use Supabase online and keep localStorage as a fallback
+4. Your stars will persist across devices as long as the Supabase project stays active ✨
 
 ## Enjoy Your Global Starfield! 🌟
 
