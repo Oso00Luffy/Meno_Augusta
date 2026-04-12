@@ -22,9 +22,11 @@ const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)
 const heroBanner = document.getElementById('heroBanner') as HTMLElement | null;
 const heroCopy = heroBanner?.querySelector('p') as HTMLParagraphElement | null;
 let currentModalPost: Post | null = null;
+let modalOpenedAt = 0;
 let editingPostId: string | null = null;
 let editingOriginalImage: string | undefined;
 let renderAllStars: () => void = () => {};
+const supportsStarHover = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
 let formSheet: HTMLDivElement;
 let addBtnTop: HTMLButtonElement;
 let sheetClose: HTMLButtonElement;
@@ -493,21 +495,23 @@ function addStar(msg: Post){
   clampStarToViewport(sp);
   
   // Augusta-style hover effects
-  sp.on('pointerover', () => { 
-    if (sp.dragging || sp.isHovered) return;
-    sp.isHovered = true;
-    sp.__oldTint = sp.tint as number; 
-    sp.scale.set((sp.baseScale ?? scale) * 1.5); 
-    sp.tint = 0xffffff; // Bright white on hover
-    clampStarToViewport(sp);
-  });
-  sp.on('pointerout', () => { 
-    if (sp.dragging || !sp.isHovered) return;
-    sp.isHovered = false;
-    sp.scale.set(sp.baseScale ?? scale); 
-    sp.tint = (sp.__oldTint || 0xffd700) as any; 
-    clampStarToViewport(sp);
-  });
+  if (supportsStarHover) {
+    sp.on('pointerover', () => { 
+      if (sp.dragging || sp.isHovered) return;
+      sp.isHovered = true;
+      sp.__oldTint = sp.tint as number; 
+      sp.scale.set((sp.baseScale ?? scale) * 1.5); 
+      sp.tint = 0xffffff; // Bright white on hover
+      clampStarToViewport(sp);
+    });
+    sp.on('pointerout', () => { 
+      if (sp.dragging || !sp.isHovered) return;
+      sp.isHovered = false;
+      sp.scale.set(sp.baseScale ?? scale); 
+      sp.tint = (sp.__oldTint || 0xffd700) as any; 
+      clampStarToViewport(sp);
+    });
+  }
   sp.on('pointerdown', (event: PIXI.FederatedPointerEvent) => {
     activeDragStar = sp;
     sp.dragging = true;
@@ -593,6 +597,7 @@ const deleteBtn = document.getElementById('deleteBtn') as HTMLButtonElement;
 
 function openModal(msg: Post){
   currentModalPost = msg;
+  modalOpenedAt = performance.now();
   mTitle.textContent = msg.title;
   mText.textContent = msg.text;
   
@@ -631,7 +636,18 @@ function closeModal(){
   mImg.style.display = 'none';
   currentModalPost = null;
 }
-modal.addEventListener('click', (e) => { if(e.target === modal) closeModal(); });
+modal.addEventListener('click', (e) => {
+  if (e.target !== modal) {
+    return;
+  }
+
+  // On touch devices, the same tap used to open the modal can bubble as a backdrop click.
+  if (performance.now() - modalOpenedAt < 220) {
+    return;
+  }
+
+  closeModal();
+});
 closeBtn.addEventListener('click', closeModal);
 editBtn.addEventListener('click', (event) => {
   event.stopPropagation();

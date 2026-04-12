@@ -44,7 +44,7 @@ body::before {
   animation: slowDrift 32s linear infinite;
 }
 
-#app { position: fixed; inset: 0; }
+#app { position: fixed; inset: 0; z-index: 1; }
 
 .hero {
   position: fixed;
@@ -248,7 +248,8 @@ body::before {
 
 /* Augusta-inspired planets/parallax layers */
 .layer { position: fixed; inset: 0; pointer-events: none; z-index: 0; }
-.planet { position: absolute; border-radius: 50%; filter: blur(0.3px); }
+.layer * { pointer-events: none; }
+.planet { position: absolute; border-radius: 50%; filter: blur(0.3px); pointer-events: none; }
 
 .planet.p1,
 .planet.p2,
