@@ -219,6 +219,19 @@ body::before {
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
 }
 
+.card-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.card-actions .action-btn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .close { 
   float: left; 
   background: transparent; 
@@ -379,6 +392,18 @@ input[type="text"]:focus, textarea:focus {
   color: var(--accent-blue);
 }
 
+.btn.danger {
+  background: linear-gradient(135deg, rgba(220, 38, 38, 0.18), rgba(220, 38, 38, 0.08));
+  border-color: rgba(248, 113, 113, 0.5);
+  color: #fecaca;
+}
+
+.btn.danger:hover {
+  border-color: #f87171;
+  color: #fff1f1;
+  box-shadow: 0 6px 24px rgba(220, 38, 38, 0.24);
+}
+
 .hint { 
   color: var(--text-muted); 
   font-size: 12px; 
@@ -529,6 +554,11 @@ input[type="text"]:focus, textarea:focus {
     margin: 12px 0;
   }
 
+  .card-actions {
+    flex-direction: column;
+    margin-top: 16px;
+  }
+
   /* Sheet (form) adjustments */
   .sheet {
     width: 100%;
@@ -584,6 +614,10 @@ input[type="text"]:focus, textarea:focus {
     flex-direction: column;
     gap: 10px;
     margin-top: 12px;
+  }
+
+  .card-actions .action-btn {
+    width: 100%;
   }
 
   .btn {
@@ -657,6 +691,10 @@ input[type="text"]:focus, textarea:focus {
 
   .card-title {
     font-size: 1.2rem;
+  }
+
+  .card-actions {
+    gap: 8px;
   }
 
   .close {

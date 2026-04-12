@@ -48,13 +48,17 @@
         <h3 id="mTitle" class="card-title">رسالة</h3>
         <img id="mImg" alt="صورة المشاركة" />
         <p id="mText"></p>
+        <div id="modalActions" class="card-actions">
+          <button id="editBtn" type="button" class="btn ghost action-btn">تعديل</button>
+          <button id="deleteBtn" type="button" class="btn danger action-btn">حذف</button>
+        </div>
       </div>
     </div>
 
   <!-- نموذج إضافة نجمة -->
     <div id="formSheet" class="sheet" aria-hidden="true">
       <div class="sheet-header">
-        <h4>أرسل نجمتك</h4>
+        <h4 id="sheetTitle">أرسل نجمتك</h4>
   <button id="sheetClose" class="icon-btn" type="button" aria-label="إغلاق">✕</button>
       </div>
       <form id="starForm">
@@ -72,7 +76,7 @@
           <small style="color: var(--text-muted); font-size: 11px;">أنواع مقبولة: JPG, PNG, GIF (أقل من 10MB)</small>
         </label>
         <div class="actions">
-          <button type="submit" class="btn primary">نشر</button>
+          <button id="submitBtn" type="submit" class="btn primary">نشر</button>
           <button type="button" id="clearBtn" class="btn ghost">تفريغ</button>
         </div>
         <p id="formHint" class="hint">نحن هنا لإسعادها فاجعل رسالتك تتألق!</p>

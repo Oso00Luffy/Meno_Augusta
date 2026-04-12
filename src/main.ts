@@ -1,6 +1,6 @@
 import './style.css';
 import * as PIXI from 'pixi.js';
-import { loadPosts, addPost, type Post } from './supabase';
+import { loadPosts, addPost, updatePost, deletePost, type Post } from './supabase';
 import { inject, track } from '@vercel/analytics';
 
 // Initialize Vercel Analytics
@@ -21,6 +21,71 @@ let posts: Post[] = [];
 const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const heroBanner = document.getElementById('heroBanner') as HTMLElement | null;
 const heroCopy = heroBanner?.querySelector('p') as HTMLParagraphElement | null;
+let currentModalPost: Post | null = null;
+let editingPostId: string | null = null;
+let editingOriginalImage: string | undefined;
+let renderAllStars: () => void = () => {};
+let formSheet: HTMLDivElement;
+let addBtnTop: HTMLButtonElement;
+let sheetClose: HTMLButtonElement;
+let starForm: HTMLFormElement;
+let titleInput: HTMLInputElement;
+let textInput: HTMLTextAreaElement;
+let imageInput: HTMLInputElement;
+let clearBtn: HTMLButtonElement;
+let toast: HTMLDivElement;
+let formTitle: HTMLHeadingElement;
+let submitBtn: HTMLButtonElement;
+let formHint: HTMLParagraphElement;
+
+function setPosts(nextPosts: Post[]) {
+  posts = nextPosts;
+  refreshHeroCopy();
+  renderAllStars();
+}
+
+function updatePostInState(updatedPost: Post) {
+  const nextPosts = posts.map(post => (post.id === updatedPost.id ? updatedPost : post));
+  setPosts(nextPosts);
+}
+
+function removePostFromState(postId: string) {
+  const nextPosts = posts.filter(post => post.id !== postId);
+  setPosts(nextPosts);
+}
+
+function openFormSheet(post?: Post) {
+  editingPostId = post?.id ?? null;
+  editingOriginalImage = post?.image;
+  starForm.reset();
+
+  if (post) {
+    titleInput.value = post.title;
+    textInput.value = post.text;
+    formTitle.textContent = 'تعديل النجمة';
+    submitBtn.textContent = 'تحديث';
+    clearBtn.textContent = 'تفريغ';
+    formHint.textContent = 'عدّل الرسالة أو الصورة ثم احفظ التغييرات.';
+  } else {
+    formTitle.textContent = 'أرسل نجمتك';
+    submitBtn.textContent = 'نشر';
+    clearBtn.textContent = 'تفريغ';
+    formHint.textContent = 'نحن هنا لإسعادها فاجعل رسالتك تتألق!';
+  }
+
+  formSheet.classList.add('open');
+}
+
+function closeFormSheet() {
+  formSheet.classList.remove('open');
+  editingPostId = null;
+  editingOriginalImage = undefined;
+  starForm.reset();
+  formTitle.textContent = 'أرسل نجمتك';
+  submitBtn.textContent = 'نشر';
+  clearBtn.textContent = 'تفريغ';
+  formHint.textContent = 'نحن هنا لإسعادها فاجعل رسالتك تتألق!';
+}
 
 function refreshHeroCopy() {
   if (!heroCopy) {
@@ -100,6 +165,10 @@ function getSupabaseFailureMessage(error: unknown): string {
 
   if (normalizedMessage.includes('row-level security') || normalizedMessage.includes('violates row level security policy')) {
     return 'سياسة RLS تمنع الحفظ. تأكد من تشغيل supabase-schema.sql كاملًا على المشروع الجديد.';
+  }
+
+  if (normalizedMessage.includes('no rows were updated on supabase') || normalizedMessage.includes('no rows were deleted on supabase')) {
+    return 'لم يتم تطبيق التعديل على Supabase. شغّل supabase-schema.sql على مشروعك الحالي لتفعيل سياسات UPDATE و DELETE.';
   }
 
   if (normalizedMessage.includes('jwt') || normalizedMessage.includes('invalid api key') || normalizedMessage.includes('unauthorized')) {
@@ -335,13 +404,33 @@ type Star = PIXI.Sprite & {
   dragStartX?: number;
   dragStartY?: number;
   blockTapUntil?: number;
-  __oldScale?:number;
+  baseScale?: number;
+  isHovered?: boolean;
   __oldTint?:number;
 };
 const stars: Star[] = [] as unknown as Star[];
 const W = () => app.renderer.width; const H = () => app.renderer.height;
 function rand(a:number,b:number){ return a + Math.random()*(b-a) }
 let activeDragStar: Star | null = null;
+
+function getStarRadius(sp: Star): number {
+  return Math.max(14, (sp.width || 0) * 0.5, (sp.height || 0) * 0.5);
+}
+
+function clampStarToViewport(sp: Star) {
+  const radius = getStarRadius(sp);
+  const w = W();
+  const h = H();
+
+  sp.x = Math.min(Math.max(sp.x, radius), Math.max(radius, w - radius));
+  sp.y = Math.min(Math.max(sp.y, radius), Math.max(radius, h - radius));
+}
+
+function getSpawnCoordinate(limit: number, radius: number): number {
+  const minimum = radius;
+  const maximum = Math.max(radius, limit - radius);
+  return minimum >= maximum ? limit * 0.5 : rand(minimum, maximum);
+}
 
 function endStarDrag() {
   if (!activeDragStar) return;
@@ -387,31 +476,37 @@ function addStar(msg: Post){
   const sp = new PIXI.Sprite(starTexture) as Star;
   const scale = rand(0.4, 1.2); // Varied sizes for visual interest
   sp.scale.set(scale);
+  sp.baseScale = scale;
   sp.alpha = rand(0.85, 1); // High visibility
   (sp as any).baseAlpha = sp.alpha;
   sp.tint = 0xffd700; // Augusta golden color
   // Use stored position if available, otherwise random
-  sp.x = msg.x !== undefined ? msg.x : rand(-100, W()+100);
-  sp.y = msg.y !== undefined ? msg.y : rand(-100, H()+100);
+  sp.x = msg.x !== undefined ? msg.x : getSpawnCoordinate(W(), (sp.scale.x * starTexture.width) / 2);
+  sp.y = msg.y !== undefined ? msg.y : getSpawnCoordinate(H(), (sp.scale.y * starTexture.height) / 2);
   sp.vx = rand(-0.3, 0.3) || 0.1; // Gentle floating motion
   sp.vy = rand(-0.2, 0.2) || -0.1;
   sp.wobble = rand(0, Math.PI*2); sp.w = rand(0.001, 0.005); // Subtle pulse
   sp.eventMode = 'static'; sp.cursor = 'pointer'; sp.msg = msg;
   sp.dragging = false;
+  sp.isHovered = false;
   sp.blockTapUntil = 0;
+  clampStarToViewport(sp);
   
   // Augusta-style hover effects
   sp.on('pointerover', () => { 
-    if (sp.dragging) return;
-    sp.__oldScale = sp.scale.x; 
+    if (sp.dragging || sp.isHovered) return;
+    sp.isHovered = true;
     sp.__oldTint = sp.tint as number; 
-    sp.scale.set(sp.scale.x*1.5); 
+    sp.scale.set((sp.baseScale ?? scale) * 1.5); 
     sp.tint = 0xffffff; // Bright white on hover
+    clampStarToViewport(sp);
   });
   sp.on('pointerout', () => { 
-    if (sp.dragging) return;
-    sp.scale.set(sp.__oldScale || scale); 
+    if (sp.dragging || !sp.isHovered) return;
+    sp.isHovered = false;
+    sp.scale.set(sp.baseScale ?? scale); 
     sp.tint = (sp.__oldTint || 0xffd700) as any; 
+    clampStarToViewport(sp);
   });
   sp.on('pointerdown', (event: PIXI.FederatedPointerEvent) => {
     activeDragStar = sp;
@@ -427,7 +522,12 @@ function addStar(msg: Post){
     sp.vx = 0;
     sp.vy = 0;
     sp.cursor = 'grabbing';
+    clampStarToViewport(sp);
     event.stopPropagation();
+  });
+  sp.on('pointerup', () => {
+    sp.dragging = false;
+    sp.cursor = 'pointer';
   });
   sp.on('pointertap', () => {
     if ((sp.blockTapUntil ?? 0) > performance.now()) return;
@@ -442,7 +542,7 @@ function addStar(msg: Post){
 }
 
 // Function to render all stars from posts
-function renderAllStars(){
+renderAllStars = function renderAllStars(){
   // Clear existing stars
   stars.forEach(star => {
     stage.removeChild(star);
@@ -453,9 +553,10 @@ function renderAllStars(){
   posts.forEach(post => {
     addStar(post);
   });
+  stars.forEach(star => clampStarToViewport(star));
   
   console.log('Rendered all stars:', posts.length);
-}
+};
 
 // Minimal Augusta-inspired background stars
 const bg = new PIXI.Graphics();
@@ -486,7 +587,12 @@ const mImg = document.getElementById('mImg') as HTMLImageElement;
 const mText = document.getElementById('mText') as HTMLParagraphElement;
 const mTitle = document.getElementById('mTitle') as HTMLHeadingElement;
 const closeBtn = document.getElementById('closeBtn') as HTMLButtonElement;
+const modalActions = document.getElementById('modalActions') as HTMLDivElement;
+const editBtn = document.getElementById('editBtn') as HTMLButtonElement;
+const deleteBtn = document.getElementById('deleteBtn') as HTMLButtonElement;
+
 function openModal(msg: Post){
+  currentModalPost = msg;
   mTitle.textContent = msg.title;
   mText.textContent = msg.text;
   
@@ -497,6 +603,17 @@ function openModal(msg: Post){
   } else {
     mImg.src = '';
     mImg.style.display = 'none';
+  }
+
+  const canModify = !!msg.id;
+  if (modalActions) {
+    modalActions.hidden = !canModify;
+  }
+  if (editBtn) {
+    editBtn.disabled = !canModify;
+  }
+  if (deleteBtn) {
+    deleteBtn.disabled = !canModify;
   }
   
   // Track star viewing
@@ -512,21 +629,72 @@ function closeModal(){
   modal.style.display = 'none'; 
   mImg.src = '';
   mImg.style.display = 'none';
+  currentModalPost = null;
 }
 modal.addEventListener('click', (e) => { if(e.target === modal) closeModal(); });
 closeBtn.addEventListener('click', closeModal);
-window.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeModal(); formSheet.classList.remove('open'); } });
+editBtn.addEventListener('click', (event) => {
+  event.stopPropagation();
+  const postToEdit = currentModalPost;
+  if (!postToEdit) {
+    return;
+  }
+
+  trackEvent('star_edit_started', { has_image: !!postToEdit.image });
+  closeModal();
+  openFormSheet(postToEdit);
+});
+deleteBtn.addEventListener('click', async (event) => {
+  event.stopPropagation();
+  const postToDelete = currentModalPost;
+  if (!postToDelete?.id) {
+    return;
+  }
+
+  const confirmed = window.confirm('هل تريد حذف هذه النجمة؟ هذا الإجراء لا يمكن التراجع عنه.');
+  if (!confirmed) {
+    return;
+  }
+
+  try {
+    const deletedPostId = postToDelete.id;
+    const deleteResult = await deletePost(deletedPostId);
+    removePostFromState(deleteResult.deletedPostId);
+    closeModal();
+
+    if (deleteResult.savedToCloud) {
+      showToast('تم حذف النجمة بنجاح', 'success');
+    } else {
+      const fallbackHint = deleteResult.fallbackReason
+        ? getSupabaseFailureMessage(deleteResult.fallbackReason)
+        : 'تعذر الاتصال بقاعدة البيانات';
+      showToast(`تم حذف النجمة محلياً فقط: ${fallbackHint}`, 'warning');
+    }
+
+    trackEvent('star_deleted', {
+      saved_to_cloud: deleteResult.savedToCloud,
+      had_image: !!postToDelete.image,
+    });
+  } catch (error) {
+    console.error('Failed to delete post:', error);
+    showToast(`تعذر حذف النجمة: ${getSupabaseFailureMessage(error)}`, 'error');
+  }
+});
+window.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeModal(); closeFormSheet(); } });
 
 // ----- Submit Sheet -----
-const formSheet = document.getElementById('formSheet') as HTMLDivElement;
-const addBtnTop = document.getElementById('addBtnTop') as HTMLButtonElement;
-const sheetClose = document.getElementById('sheetClose') as HTMLButtonElement;
-const starForm = document.getElementById('starForm') as HTMLFormElement;
-const titleInput = document.getElementById('titleInput') as HTMLInputElement;
-const textInput = document.getElementById('textInput') as HTMLTextAreaElement;
-const imageInput = document.getElementById('imageInput') as HTMLInputElement;
-const clearBtn = document.getElementById('clearBtn') as HTMLButtonElement;
-const toast = document.getElementById('toast') as HTMLDivElement;
+formSheet = document.getElementById('formSheet') as HTMLDivElement;
+addBtnTop = document.getElementById('addBtnTop') as HTMLButtonElement;
+sheetClose = document.getElementById('sheetClose') as HTMLButtonElement;
+starForm = document.getElementById('starForm') as HTMLFormElement;
+titleInput = document.getElementById('titleInput') as HTMLInputElement;
+textInput = document.getElementById('textInput') as HTMLTextAreaElement;
+imageInput = document.getElementById('imageInput') as HTMLInputElement;
+clearBtn = document.getElementById('clearBtn') as HTMLButtonElement;
+toast = document.getElementById('toast') as HTMLDivElement;
+formTitle = document.getElementById('sheetTitle') as HTMLHeadingElement;
+submitBtn = document.getElementById('submitBtn') as HTMLButtonElement;
+formHint = document.getElementById('formHint') as HTMLParagraphElement;
 
 // التحقق من وجود العناصر
 console.log('Form elements check:', {
@@ -591,11 +759,11 @@ if (isMobile) {
 addBtnTop.addEventListener('click', () => {
   console.log('Add button clicked'); // تتبع
   trackEvent('add_star_button_clicked', { source: 'top_button' });
-  formSheet.classList.add('open');
+  openFormSheet();
 });
 sheetClose.addEventListener('click', () => {
   console.log('Close button clicked'); // تتبع
-  formSheet.classList.remove('open');
+  closeFormSheet();
 });
 
 // optional: close sheet when clicking outside (on the parallax/backdrop)
@@ -645,14 +813,13 @@ imageInput.addEventListener('change', (e) => {
 starForm.addEventListener('submit', async (e) => {
   console.log('Form submit triggered!'); // تتبع
   e.preventDefault();
-  
+
+  const isEditing = !!editingPostId;
+
   // تعطيل زر الإرسال أثناء المعالجة
-  const submitBtn = starForm.querySelector('button[type="submit"]') as HTMLButtonElement;
-  if (submitBtn) {
-    submitBtn.disabled = true;
-    submitBtn.textContent = 'جاري النشر...';
-    submitBtn.classList.add('loading');
-  }
+  submitBtn.disabled = true;
+  submitBtn.textContent = isEditing ? 'جاري التحديث...' : 'جاري النشر...';
+  submitBtn.classList.add('loading');
   
   try {
     const files = imageInput.files;
@@ -672,6 +839,15 @@ starForm.addEventListener('submit', async (e) => {
       showToast('يرجى إدخال نص للمنشور', 'warning');
       return;
     }
+
+    const existingPost = isEditing
+      ? posts.find(post => post.id === editingPostId) ?? null
+      : null;
+
+    if (isEditing && !existingPost) {
+      showToast('تعذر العثور على النجمة الأصلية للتعديل', 'error');
+      return;
+    }
     
     // Image is now optional
     let dataUrl: string | undefined = undefined;
@@ -687,13 +863,15 @@ starForm.addEventListener('submit', async (e) => {
         showToast('خطأ في معالجة الصورة: ' + (imageError instanceof Error ? imageError.message : 'خطأ غير معروف'), 'error');
         return;
       }
+    } else if (isEditing) {
+      dataUrl = editingOriginalImage;
     } else {
       console.log('No image provided - creating star without image');
     }
     
     // Get random position for the star
-    const x = Math.random() * app.renderer.width;
-    const y = Math.random() * app.renderer.height;
+    const x = isEditing && existingPost ? existingPost.x : Math.random() * app.renderer.width;
+    const y = isEditing && existingPost ? existingPost.y : Math.random() * app.renderer.height;
     
     const newPost: Omit<Post, 'id' | 'created_at'> = {
       title: titleInput.value.trim(),
@@ -706,38 +884,45 @@ starForm.addEventListener('submit', async (e) => {
     console.log('Saving post to Supabase...'); // تتبع
     
     try {
-      const saveResult = await addPost(newPost);
+      const saveResult = isEditing && editingPostId
+        ? await updatePost(editingPostId, newPost, existingPost ?? undefined)
+        : await addPost(newPost);
       const savedPost = saveResult.post;
       
       if (savedPost) {
-        posts.push(savedPost);
-        addStar(savedPost);
+        if (isEditing) {
+          updatePostInState(savedPost);
+        } else {
+          setPosts([savedPost, ...posts]);
+        }
         celebratePublish();
-        starForm.reset();
-        formSheet.classList.remove('open');
+        closeFormSheet();
         if (saveResult.savedToCloud) {
-          showToast('تم النشر بنجاح! ✨');
+          showToast(isEditing ? 'تم تحديث النجمة بنجاح! ✨' : 'تم النشر بنجاح! ✨');
         } else {
           const fallbackHint = saveResult.fallbackReason
             ? getSupabaseFailureMessage(saveResult.fallbackReason)
             : 'تعذر الاتصال بقاعدة البيانات';
-          showToast(`تم حفظ الرسالة محلياً فقط: ${fallbackHint}`, 'warning');
+          showToast(
+            `${isEditing ? 'تم تحديث الرسالة' : 'تم حفظ الرسالة'} محلياً فقط: ${fallbackHint}`,
+            'warning'
+          );
           console.warn('Saved locally instead of Supabase:', saveResult.fallbackReason);
         }
-        refreshHeroCopy();
         
         // Track successful star creation
-        trackEvent('star_created', {
+        trackEvent(isEditing ? 'star_updated' : 'star_created', {
           has_image: !!savedPost.image,
           title_length: savedPost.title.length,
           text_length: savedPost.text.length,
           device_type: isTouchDevice ? 'touch' : 'desktop',
-          saved_to_cloud: saveResult.savedToCloud
+          saved_to_cloud: saveResult.savedToCloud,
+          edit_mode: isEditing,
         });
         
         console.log('Post published:', saveResult.savedToCloud ? 'Supabase' : 'local fallback'); // تتبع
       } else {
-        throw new Error('Failed to save post to Supabase');
+        throw new Error(isEditing ? 'Failed to update post' : 'Failed to save post to Supabase');
       }
     } catch (supabaseError) {
       console.error('Supabase error:', supabaseError);
@@ -749,11 +934,9 @@ starForm.addEventListener('submit', async (e) => {
     showToast('حدث خطأ أثناء النشر، يرجى المحاولة مرة أخرى', 'error');
   } finally {
     // إعادة تفعيل زر الإرسال
-    if (submitBtn) {
-      submitBtn.disabled = false;
-      submitBtn.textContent = 'نشر';
-      submitBtn.classList.remove('loading');
-    }
+    submitBtn.disabled = false;
+    submitBtn.textContent = editingPostId ? 'تحديث' : 'نشر';
+    submitBtn.classList.remove('loading');
   }
 });
 
@@ -818,7 +1001,6 @@ async function fileToDataUrl(file: File, maxDim=1200, quality=0.85): Promise<str
 app.ticker.add((ticker: PIXI.Ticker) => {
   const delta = ticker.deltaTime as number;
   const w = W(), h = H();
-  const margin = 18;
   const dragFriction = 0.985;
   const bounce = 0.72;
   for (const sp of stars) {
@@ -832,22 +1014,26 @@ app.ticker.add((ticker: PIXI.Ticker) => {
       sp.vx *= dragFriction;
       sp.vy *= dragFriction;
 
-      if (sp.x < margin) {
-        sp.x = margin;
+      const radius = getStarRadius(sp);
+
+      if (sp.x < radius) {
+        sp.x = radius;
         sp.vx = Math.abs(sp.vx) * bounce;
-      } else if (sp.x > w - margin) {
-        sp.x = w - margin;
+      } else if (sp.x > w - radius) {
+        sp.x = w - radius;
         sp.vx = -Math.abs(sp.vx) * bounce;
       }
 
-      if (sp.y < margin) {
-        sp.y = margin;
+      if (sp.y < radius) {
+        sp.y = radius;
         sp.vy = Math.abs(sp.vy) * bounce;
-      } else if (sp.y > h - margin) {
-        sp.y = h - margin;
+      } else if (sp.y > h - radius) {
+        sp.y = h - radius;
         sp.vy = -Math.abs(sp.vy) * bounce;
       }
     }
+
+    clampStarToViewport(sp);
 
     // twinkle
     const base = (sp as any).baseAlpha ?? 0.8;
@@ -859,7 +1045,10 @@ app.ticker.add((ticker: PIXI.Ticker) => {
 let resizeTimer: number | undefined;
 window.addEventListener('resize', () => {
   clearTimeout(resizeTimer);
-  resizeTimer = window.setTimeout(() => drawBackground(), 200);
+  resizeTimer = window.setTimeout(() => {
+    drawBackground();
+    stars.forEach(star => clampStarToViewport(star));
+  }, 200);
 });
 
 // ----- Parallax planets -----

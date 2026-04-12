@@ -30,6 +30,18 @@ export interface AddPostResult {
   fallbackReason?: string
 }
 
+export interface UpdatePostResult {
+  post: Post
+  savedToCloud: boolean
+  fallbackReason?: string
+}
+
+export interface DeletePostResult {
+  deletedPostId: string
+  savedToCloud: boolean
+  fallbackReason?: string
+}
+
 function extractSupabaseErrorReason(error: unknown): string {
   if (error instanceof Error) {
     return error.message
@@ -179,6 +191,39 @@ function syncLocalPosts(posts: Post[]): void {
   saveLocalPosts(posts)
 }
 
+function updateLocalPost(postId: string, updates: Partial<Omit<Post, 'id' | 'created_at'>>): Post | null {
+  const posts = loadLocalPosts()
+  const index = posts.findIndex(post => post.id === postId)
+
+  if (index === -1) {
+    return null
+  }
+
+  const existingPost = posts[index]
+  const updatedPost: Post = {
+    ...existingPost,
+    ...updates,
+    id: existingPost.id,
+    created_at: existingPost.created_at,
+  }
+
+  posts[index] = updatedPost
+  saveLocalPosts(posts)
+  return updatedPost
+}
+
+function deleteLocalPost(postId: string): boolean {
+  const posts = loadLocalPosts()
+  const filteredPosts = posts.filter(post => post.id !== postId)
+
+  if (filteredPosts.length === posts.length) {
+    return false
+  }
+
+  saveLocalPosts(filteredPosts)
+  return true
+}
+
 // Supabase database functions
 export async function savePosts(posts: Post[]): Promise<void> {
   if (!isSupabaseConfigured) {
@@ -261,26 +306,29 @@ export async function addPost(post: Omit<Post, 'id' | 'created_at'>): Promise<Ad
   }
 
   try {
+    const savedPost: Post = {
+      ...post,
+      id: crypto.randomUUID(),
+      created_at: new Date().toISOString(),
+    }
+
     const { data, error } = await supabase
       .from('posts')
-      .insert([{
-        title: post.title,
-        text: post.text,
-        image: post.image,
-        x: post.x,
-        y: post.y
-      }])
-      .select()
-      .single()
+      .insert([savedPost])
+      .select('id')
 
     if (error) {
       console.error('Error adding post:', error)
       throw error
     }
 
+    if (!data || data.length === 0) {
+      console.warn('Post inserted but no row was returned. Using client-generated record.')
+    }
+
     console.log('Post added to Supabase successfully!')
     return {
-      post: data,
+      post: savedPost,
       savedToCloud: true,
     }
   } catch (error) {
@@ -291,5 +339,138 @@ export async function addPost(post: Omit<Post, 'id' | 'created_at'>): Promise<Ad
       savedToCloud: false,
       fallbackReason: reason,
     }
+  }
+}
+
+export async function updatePost(
+  postId: string,
+  updates: Partial<Omit<Post, 'id' | 'created_at'>>,
+  existingPost?: Post
+): Promise<UpdatePostResult> {
+  if (!isSupabaseConfigured) {
+    console.warn('Supabase is unavailable. Updating post locally instead.')
+
+    const updatedPost = updateLocalPost(postId, updates)
+    if (!updatedPost) {
+      throw new Error('Post not found')
+    }
+
+    return {
+      post: updatedPost,
+      savedToCloud: false,
+      fallbackReason: 'Supabase is not configured.',
+    }
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('posts')
+      .update({
+        title: updates.title,
+        text: updates.text,
+        image: updates.image,
+        x: updates.x,
+        y: updates.y,
+      })
+      .eq('id', postId)
+      .select('id')
+
+    if (error) {
+      console.error('Error updating post:', error)
+      throw error
+    }
+
+    if (!data || data.length === 0) {
+      throw new Error('No rows were updated on Supabase. Check UPDATE policies and row visibility.')
+    }
+
+    console.log('Post updated in Supabase successfully!')
+    return {
+      post: existingPost
+        ? {
+            ...existingPost,
+            ...updates,
+            id: existingPost.id,
+            created_at: existingPost.created_at,
+          }
+        : {
+            id: postId,
+            title: updates.title ?? '',
+            text: updates.text ?? '',
+            image: updates.image,
+            x: updates.x ?? 0,
+            y: updates.y ?? 0,
+          },
+      savedToCloud: true,
+    }
+  } catch (error) {
+    console.error('Failed to update post:', error)
+    if (!isSupabaseConfigured) {
+      const updatedPost = updateLocalPost(postId, updates)
+
+      if (!updatedPost) {
+        throw error instanceof Error ? error : new Error('Post not found')
+      }
+
+      return {
+        post: updatedPost,
+        savedToCloud: false,
+        fallbackReason: 'Supabase is not configured.',
+      }
+    }
+
+    throw error instanceof Error ? error : new Error(extractSupabaseErrorReason(error))
+  }
+}
+
+export async function deletePost(postId: string): Promise<DeletePostResult> {
+  if (!isSupabaseConfigured) {
+    console.warn('Supabase is unavailable. Deleting post locally instead.')
+
+    const deleted = deleteLocalPost(postId)
+    if (!deleted) {
+      throw new Error('Post not found')
+    }
+
+    return {
+      deletedPostId: postId,
+      savedToCloud: false,
+      fallbackReason: 'Supabase is not configured.',
+    }
+  }
+
+  try {
+    const { error } = await supabase
+      .from('posts')
+      .delete()
+      .eq('id', postId)
+
+    if (error) {
+      console.error('Error deleting post:', error)
+      throw error
+    }
+
+    console.log('Post deleted from Supabase successfully!')
+    return {
+      deletedPostId: postId,
+      savedToCloud: true,
+    }
+  } catch (error) {
+    console.error('Failed to delete post:', error)
+    if (!isSupabaseConfigured) {
+      const deleted = deleteLocalPost(postId)
+
+      if (!deleted) {
+        throw error instanceof Error ? error : new Error('Post not found')
+      }
+
+      return {
+        deletedPostId: postId,
+        savedToCloud: false,
+        fallbackReason: 'Supabase is not configured.',
+      }
+    }
+
+    throw error instanceof Error ? error : new Error(extractSupabaseErrorReason(error))
   }
 }

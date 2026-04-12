@@ -30,14 +30,15 @@ CREATE POLICY "Anyone can insert posts" ON posts
   WITH CHECK (true);
 
 -- Optional: Allow anyone to update their own posts (if you add user authentication later)
--- CREATE POLICY "Users can update own posts" ON posts 
---   FOR UPDATE 
---   USING (auth.uid() = user_id);
+CREATE POLICY "Anyone can update posts" ON posts 
+  FOR UPDATE 
+  USING (true)
+  WITH CHECK (true);
 
 -- Optional: Allow anyone to delete posts (be careful with this in production)
--- CREATE POLICY "Anyone can delete posts" ON posts 
---   FOR DELETE 
---   USING (true);
+CREATE POLICY "Anyone can delete posts" ON posts 
+  FOR DELETE 
+  USING (true);
 
 -- Create an index for faster queries
 CREATE INDEX posts_created_at_idx ON posts (created_at DESC);
