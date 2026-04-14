@@ -645,6 +645,8 @@ type Star = PIXI.Sprite & {
   w:number;
   msg:Post;
   isOwned?: boolean;
+  ownedHalo?: PIXI.Graphics;
+  ownedBadge?: PIXI.Graphics;
   dragging?: boolean;
   dragOffsetX?: number;
   dragOffsetY?: number;
@@ -748,6 +750,7 @@ function addStar(msg: Post){
     const halo = new PIXI.Graphics();
     halo.lineStyle(4, 0x7df9ff, 0.95);
     halo.drawCircle(50, 50, 44);
+    halo.alpha = 0.72;
 
     const badge = new PIXI.Graphics();
     badge.lineStyle(2, 0x7df9ff, 1);
@@ -757,9 +760,12 @@ function addStar(msg: Post){
     badge.beginFill(0x7df9ff, 1);
     badge.drawCircle(84, 16, 4);
     badge.endFill();
+    badge.alpha = 0.9;
 
     sp.addChild(halo);
     sp.addChild(badge);
+    sp.ownedHalo = halo;
+    sp.ownedBadge = badge;
   }
 
   clampStarToViewport(sp);
@@ -1439,6 +1445,17 @@ app.ticker.add((ticker: PIXI.Ticker) => {
     const base = (sp as any).baseAlpha ?? 0.8;
     const tw = 0.2 * Math.sin(sp.wobble * 1.5);
     sp.alpha = Math.max(0.4, Math.min(1, base + tw));
+
+    // Owned star cinematic glow animation.
+    if (sp.isOwned && sp.ownedHalo) {
+      const glowWave = (Math.sin(sp.wobble * 2.4) + 1) * 0.5;
+      sp.ownedHalo.alpha = 0.5 + glowWave * 0.45;
+      const haloScale = 1 + glowWave * 0.14;
+      sp.ownedHalo.scale.set(haloScale);
+      if (sp.ownedBadge) {
+        sp.ownedBadge.alpha = 0.7 + glowWave * 0.3;
+      }
+    }
   }
 });
 
