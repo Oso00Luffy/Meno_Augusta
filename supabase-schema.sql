@@ -5,8 +5,11 @@
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 -- Create the posts table
-CREATE TABLE posts (
+CREATE TABLE IF NOT EXISTS posts (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  owner_id UUID NOT NULL DEFAULT auth.uid() REFERENCES auth.users(id) ON DELETE CASCADE,
+  owner_username TEXT NOT NULL DEFAULT '',
+  owner_color TEXT NOT NULL DEFAULT '#d4af37',
   title TEXT NOT NULL,
   text TEXT NOT NULL,
   image TEXT, -- Base64 encoded image data
@@ -18,30 +21,49 @@ CREATE TABLE posts (
 -- Enable Row Level Security (RLS)
 ALTER TABLE posts ENABLE ROW LEVEL SECURITY;
 
+-- Migration for existing old projects (safe to run multiple times)
+-- Must run before policies because policies reference owner_id.
+ALTER TABLE posts
+  ADD COLUMN IF NOT EXISTS owner_id UUID REFERENCES auth.users(id) ON DELETE CASCADE;
+
+ALTER TABLE posts
+  ALTER COLUMN owner_id SET DEFAULT auth.uid();
+
+ALTER TABLE posts
+  ADD COLUMN IF NOT EXISTS owner_username TEXT NOT NULL DEFAULT '';
+
+ALTER TABLE posts
+  ADD COLUMN IF NOT EXISTS owner_color TEXT NOT NULL DEFAULT '#d4af37';
+
 -- Create policies for public access
+DROP POLICY IF EXISTS "Anyone can view posts" ON posts;
+DROP POLICY IF EXISTS "Anyone can insert posts" ON posts;
+DROP POLICY IF EXISTS "Anyone can update posts" ON posts;
+DROP POLICY IF EXISTS "Anyone can delete posts" ON posts;
+
 -- Allow anyone to read posts
 CREATE POLICY "Anyone can view posts" ON posts 
   FOR SELECT 
   USING (true);
 
--- Allow anyone to insert posts
+-- Allow signed-in users to insert posts that belong to them
 CREATE POLICY "Anyone can insert posts" ON posts 
   FOR INSERT 
-  WITH CHECK (true);
+  WITH CHECK (auth.uid() = owner_id);
 
--- Optional: Allow anyone to update their own posts (if you add user authentication later)
+-- Allow users to update only their own posts
 CREATE POLICY "Anyone can update posts" ON posts 
   FOR UPDATE 
-  USING (true)
-  WITH CHECK (true);
+  USING (auth.uid() = owner_id)
+  WITH CHECK (auth.uid() = owner_id);
 
--- Optional: Allow anyone to delete posts (be careful with this in production)
+-- Allow users to delete only their own posts
 CREATE POLICY "Anyone can delete posts" ON posts 
   FOR DELETE 
-  USING (true);
+  USING (auth.uid() = owner_id);
 
 -- Create an index for faster queries
-CREATE INDEX posts_created_at_idx ON posts (created_at DESC);
+CREATE INDEX IF NOT EXISTS posts_created_at_idx ON posts (created_at DESC);
 
 -- Optional: Add a function to clean up old posts (to prevent infinite growth)
 -- This function will keep only the latest 1000 posts

@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient, type Session } from '@supabase/supabase-js'
 
 // These will be your Supabase project credentials
 // You'll get these from your Supabase dashboard
@@ -6,22 +6,65 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'YOUR_SUPABASE_URL'
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'YOUR_SUPABASE_ANON_KEY'
 
 // Check if Supabase is properly configured
-const isSupabaseConfigured = supabaseUrl !== 'YOUR_SUPABASE_URL' && supabaseKey !== 'YOUR_SUPABASE_ANON_KEY'
-const LS_KEY = 'meno-augusta.posts.v2'
-const memoryPosts = new Map<string, Post>()
-const LOCAL_STORAGE_BYTE_LIMIT = 2.5 * 1024 * 1024
+export const isSupabaseConfigured = supabaseUrl !== 'YOUR_SUPABASE_URL' && supabaseKey !== 'YOUR_SUPABASE_ANON_KEY'
+const OWNER_COLORS = ['#d4af37', '#4a9eff', '#a855f7', '#22c55e', '#f59e0b', '#f472b6', '#38bdf8']
+const INTERNAL_EMAIL_DOMAIN = 'local.dev'
 
-export const supabase = createClient(supabaseUrl, supabaseKey)
+// Custom storage for Supabase auth - use memory-based storage to avoid localStorage quota issues
+class MemoryStorage implements Storage {
+  private store = new Map<string, string>()
+
+  getItem(key: string): string | null {
+    return this.store.get(key) || null
+  }
+
+  setItem(key: string, value: string): void {
+    this.store.set(key, value)
+  }
+
+  removeItem(key: string): void {
+    this.store.delete(key)
+  }
+
+  clear(): void {
+    this.store.clear()
+  }
+
+  key(index: number): string | null {
+    const keys = Array.from(this.store.keys())
+    return keys[index] || null
+  }
+
+  get length(): number {
+    return this.store.size
+  }
+}
+
+export const supabase = createClient(supabaseUrl, supabaseKey, {
+  auth: {
+    storage: new MemoryStorage(),
+    autoRefreshToken: true,
+    persistSession: false,
+  }
+})
 
 // Database types for our posts
 export interface Post {
   id?: string
+  owner_id?: string
+  owner_username?: string
+  owner_color?: string
   title: string
   text: string
   image?: string
   x: number
   y: number
   created_at?: string
+}
+
+export interface AuthUserSummary {
+  id: string
+  username: string
 }
 
 export interface AddPostResult {
@@ -40,6 +83,11 @@ export interface DeletePostResult {
   deletedPostId: string
   savedToCloud: boolean
   fallbackReason?: string
+}
+
+export interface AuthState {
+  user: AuthUserSummary | null
+  session: Session | null
 }
 
 function extractSupabaseErrorReason(error: unknown): string {
@@ -74,207 +122,148 @@ function extractSupabaseErrorReason(error: unknown): string {
   return 'Unknown Supabase error'
 }
 
-function isLocalStorageAvailable(): boolean {
-  try {
-    const test = '__meno_augusta_ls_test__'
-    localStorage.setItem(test, test)
-    localStorage.removeItem(test)
-    return true
-  } catch {
-    return false
-  }
+function sanitizeUsername(username: string): string {
+  return username.trim().toLowerCase().replace(/[^a-z0-9._-]/g, '').replace(/^[._-]+|[._-]+$/g, '').slice(0, 24)
 }
 
-function loadLocalPosts(): Post[] {
-  if (!isLocalStorageAvailable()) {
-    return Array.from(memoryPosts.values())
-  }
-
-  try {
-    const data = localStorage.getItem(LS_KEY)
-    if (!data) {
-      return Array.from(memoryPosts.values())
-    }
-
-    const parsed = JSON.parse(data)
-    if (!Array.isArray(parsed)) {
-      console.warn('Local post cache is invalid, resetting it.')
-      return Array.from(memoryPosts.values())
-    }
-
-    return parsed as Post[]
-  } catch (error) {
-    console.error('Failed to load local posts:', error)
-    return Array.from(memoryPosts.values())
-  }
+function usernameToInternalEmail(username: string): string {
+  const normalized = sanitizeUsername(username)
+  return `${normalized}@${INTERNAL_EMAIL_DOMAIN}`
 }
 
-function saveLocalPosts(posts: Post[]): void {
-  if (!isLocalStorageAvailable()) {
-    memoryPosts.clear()
-    for (const post of posts) {
-      if (post.id) {
-        memoryPosts.set(post.id, post)
-      }
-    }
-    return
-  }
-
-  try {
-    const attempts = [
-      posts,
-      posts.slice(-100).map((post, index) => index < 20 ? post : { ...post, image: undefined }),
-      posts.slice(-50).map((post, index) => index < 10 ? post : { ...post, image: undefined }),
-      posts.slice(-20).map(post => ({ ...post, image: undefined })),
-      posts.slice(-5).map(post => ({ ...post, image: undefined })),
-      posts.slice(-1).map(post => ({ ...post, image: undefined })),
-    ]
-
-    for (const candidatePosts of attempts) {
-      const serialized = JSON.stringify(candidatePosts)
-
-      if (serialized.length > LOCAL_STORAGE_BYTE_LIMIT) {
-        continue
-      }
-
-      try {
-        localStorage.setItem(LS_KEY, serialized)
-        return
-      } catch (error) {
-        if (!(error instanceof Error) || error.name !== 'QuotaExceededError') {
-          throw error
-        }
-      }
-    }
-
-    memoryPosts.clear()
-    for (const post of posts.slice(-1)) {
-      if (post.id) {
-        memoryPosts.set(post.id, post)
-      }
-    }
-  } catch (error) {
-    console.error('Failed to save local posts:', error)
-
-    if (error instanceof Error && error.name === 'QuotaExceededError') {
-      memoryPosts.clear()
-      for (const post of posts.slice(-1)) {
-        if (post.id) {
-          memoryPosts.set(post.id, post)
-        }
-      }
-    }
-  }
-}
-
-function createLocalPost(post: Omit<Post, 'id' | 'created_at'>): Post {
-  const savedPostId = crypto.randomUUID()
-  const savedPost: Post = {
-    ...post,
-    id: savedPostId,
-    created_at: new Date().toISOString(),
-  }
-
-  const posts = loadLocalPosts()
-  posts.unshift(savedPost)
-  try {
-    saveLocalPosts(posts)
-  } catch (error) {
-    console.error('Unable to persist local post, keeping it in memory only:', error)
-    memoryPosts.set(savedPostId, savedPost)
-  }
-
-  return savedPost
-}
-
-function syncLocalPosts(posts: Post[]): void {
-  saveLocalPosts(posts)
-}
-
-function updateLocalPost(postId: string, updates: Partial<Omit<Post, 'id' | 'created_at'>>): Post | null {
-  const posts = loadLocalPosts()
-  const index = posts.findIndex(post => post.id === postId)
-
-  if (index === -1) {
+function normalizeUser(session: Session | null): AuthUserSummary | null {
+  const user = session?.user
+  if (!user) {
     return null
   }
 
-  const existingPost = posts[index]
-  const updatedPost: Post = {
-    ...existingPost,
-    ...updates,
-    id: existingPost.id,
-    created_at: existingPost.created_at,
-  }
+  const metadataUsername = user.user_metadata && typeof user.user_metadata.username === 'string'
+    ? user.user_metadata.username
+    : ''
+  const fallbackUsername = user.email?.split('@')[0] ?? ''
 
-  posts[index] = updatedPost
-  saveLocalPosts(posts)
-  return updatedPost
+  return {
+    id: user.id,
+    username: sanitizeUsername(metadataUsername || fallbackUsername),
+  }
 }
 
-function deleteLocalPost(postId: string): boolean {
-  const posts = loadLocalPosts()
-  const filteredPosts = posts.filter(post => post.id !== postId)
+function getColorForUsername(username: string): string {
+  let hash = 0
 
-  if (filteredPosts.length === posts.length) {
-    return false
+  for (let index = 0; index < username.length; index += 1) {
+    hash = (hash * 31 + username.charCodeAt(index)) >>> 0
   }
 
-  saveLocalPosts(filteredPosts)
-  return true
+  return OWNER_COLORS[hash % OWNER_COLORS.length]
 }
 
-// Supabase database functions
-export async function savePosts(posts: Post[]): Promise<void> {
+function getAuthRequiredError(): Error {
+  return new Error('Authentication required. Please sign in to create, edit, or delete your stars.')
+}
+
+export async function getAuthState(): Promise<AuthState> {
   if (!isSupabaseConfigured) {
-    syncLocalPosts(posts)
+    return { user: null, session: null }
+  }
+
+  const { data } = await supabase.auth.getSession()
+  return {
+    user: normalizeUser(data.session),
+    session: data.session,
+  }
+}
+
+// onAuthStateChange subscribes to auth session changes so the UI can react to sign-in and sign-out.
+export function onAuthStateChange(callback: (state: AuthState) => void) {
+  if (!isSupabaseConfigured) {
+    callback({ user: null, session: null })
+    return { data: { subscription: { unsubscribe() {} } } }
+  }
+
+  return supabase.auth.onAuthStateChange((_event, session) => {
+    callback({
+      user: normalizeUser(session),
+      session,
+    })
+  })
+}
+
+export async function signInWithUsername(username: string, password: string): Promise<AuthUserSummary> {
+  if (!isSupabaseConfigured) {
+    throw new Error('Supabase is not configured.')
+  }
+
+  const normalizedUsername = sanitizeUsername(username)
+  if (!normalizedUsername) {
+    throw new Error('Username is required.')
+  }
+
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: usernameToInternalEmail(normalizedUsername),
+    password,
+  })
+  if (error) {
+    throw error
+  }
+
+  const user = normalizeUser(data.session)
+  if (!user) {
+    throw new Error('Sign-in completed but no session was returned.')
+  }
+
+  return user
+}
+
+export async function signUpWithUsername(username: string, password: string): Promise<AuthUserSummary | null> {
+  if (!isSupabaseConfigured) {
+    throw new Error('Supabase is not configured.')
+  }
+
+  const normalizedUsername = sanitizeUsername(username)
+  if (!normalizedUsername) {
+    throw new Error('Username is required.')
+  }
+
+  const { data, error } = await supabase.auth.signUp({
+    email: usernameToInternalEmail(normalizedUsername),
+    password,
+    options: {
+      data: {
+        username: normalizedUsername,
+      },
+    },
+  })
+  if (error) {
+    throw error
+  }
+
+  return normalizeUser(data.session)
+}
+
+export async function signOut(): Promise<void> {
+  if (!isSupabaseConfigured) {
     return
   }
 
-  try {
-    // Clear existing posts and insert new ones
-    // Note: In a real app, you'd want more sophisticated sync logic
-    const { error: deleteError } = await supabase
-      .from('posts')
-      .delete()
-      .neq('id', '00000000-0000-0000-0000-000000000000') // Delete all posts
-
-    if (deleteError) {
-      console.error('Error clearing posts:', deleteError)
-    }
-
-    // Insert new posts
-    const { error: insertError } = await supabase
-      .from('posts')
-      .insert(posts.map(post => ({
-        title: post.title,
-        text: post.text,
-        image: post.image,
-        x: post.x,
-        y: post.y
-      })))
-
-    if (insertError) {
-      console.error('Error saving posts:', insertError)
-      throw insertError
-    }
-
-    console.log('Posts saved to Supabase successfully!')
-  } catch (error) {
-    console.error('Failed to save posts:', error)
-    syncLocalPosts(posts)
+  const { error } = await supabase.auth.signOut()
+  if (error) {
     throw error
   }
 }
 
+// Supabase database functions
+export async function savePosts(_posts: Post[]): Promise<void> {
+  if (!isSupabaseConfigured) {
+    throw new Error('Supabase is not configured.')
+  }
+
+  throw new Error('Bulk save is disabled in authenticated mode. Use addPost, updatePost, and deletePost instead.')
+}
+
 export async function loadPosts(): Promise<Post[]> {
   if (!isSupabaseConfigured) {
-    console.warn('Supabase is unavailable. Falling back to local storage.')
-    return loadLocalPosts().sort((a, b) => {
-      const left = new Date(b.created_at ?? 0).getTime()
-      const right = new Date(a.created_at ?? 0).getTime()
-      return left - right
-    })
+    throw new Error('Supabase is not configured.')
   }
 
   try {
@@ -285,45 +274,53 @@ export async function loadPosts(): Promise<Post[]> {
 
     if (error) {
       console.error('Error loading posts:', error)
-      return []
+      throw error
     }
 
     return data || []
   } catch (error) {
     console.error('Failed to load posts:', error)
-    return loadLocalPosts()
+    throw error instanceof Error ? error : new Error(extractSupabaseErrorReason(error))
   }
 }
 
 export async function addPost(post: Omit<Post, 'id' | 'created_at'>): Promise<AddPostResult> {
   if (!isSupabaseConfigured) {
-    console.warn('Supabase is unavailable. Saving post locally instead.')
-    return {
-      post: createLocalPost(post),
-      savedToCloud: false,
-      fallbackReason: 'Supabase is not configured.',
-    }
+    throw new Error('Supabase is not configured.')
   }
 
   try {
-    const savedPost: Post = {
-      ...post,
-      id: crypto.randomUUID(),
-      created_at: new Date().toISOString(),
+    const { user } = await getAuthState()
+    if (!user) {
+      throw getAuthRequiredError()
+    }
+
+    const insertPayload = {
+      title: post.title,
+      text: post.text,
+      image: post.image,
+      x: post.x,
+      y: post.y,
     }
 
     const { data, error } = await supabase
       .from('posts')
-      .insert([savedPost])
-      .select('id')
+      .insert([insertPayload])
+      .select('*')
+      .single()
 
     if (error) {
       console.error('Error adding post:', error)
       throw error
     }
 
-    if (!data || data.length === 0) {
-      console.warn('Post inserted but no row was returned. Using client-generated record.')
+    const savedPost = (data as Post) ?? {
+      ...post,
+      owner_id: user.id,
+      owner_username: user.username,
+      owner_color: getColorForUsername(user.username),
+      id: crypto.randomUUID(),
+      created_at: new Date().toISOString(),
     }
 
     console.log('Post added to Supabase successfully!')
@@ -333,12 +330,7 @@ export async function addPost(post: Omit<Post, 'id' | 'created_at'>): Promise<Ad
     }
   } catch (error) {
     console.error('Failed to add post:', error)
-    const reason = extractSupabaseErrorReason(error)
-    return {
-      post: createLocalPost(post),
-      savedToCloud: false,
-      fallbackReason: reason,
-    }
+    throw error instanceof Error ? error : new Error(extractSupabaseErrorReason(error))
   }
 }
 
@@ -348,21 +340,19 @@ export async function updatePost(
   existingPost?: Post
 ): Promise<UpdatePostResult> {
   if (!isSupabaseConfigured) {
-    console.warn('Supabase is unavailable. Updating post locally instead.')
-
-    const updatedPost = updateLocalPost(postId, updates)
-    if (!updatedPost) {
-      throw new Error('Post not found')
-    }
-
-    return {
-      post: updatedPost,
-      savedToCloud: false,
-      fallbackReason: 'Supabase is not configured.',
-    }
+    throw new Error('Supabase is not configured.')
   }
 
   try {
+    const { user } = await getAuthState()
+    if (!user) {
+      throw getAuthRequiredError()
+    }
+
+    if (existingPost?.owner_id && existingPost.owner_id !== user.id) {
+      throw new Error('You can only edit your own stars.')
+    }
+
     const { data, error } = await supabase
       .from('posts')
       .update({
@@ -373,73 +363,41 @@ export async function updatePost(
         y: updates.y,
       })
       .eq('id', postId)
-      .select('id')
+      .select('*')
+      .single()
 
     if (error) {
       console.error('Error updating post:', error)
       throw error
     }
 
-    if (!data || data.length === 0) {
-      throw new Error('No rows were updated on Supabase. Check UPDATE policies and row visibility.')
-    }
-
     console.log('Post updated in Supabase successfully!')
     return {
-      post: existingPost
-        ? {
-            ...existingPost,
-            ...updates,
-            id: existingPost.id,
-            created_at: existingPost.created_at,
-          }
-        : {
-            id: postId,
-            title: updates.title ?? '',
-            text: updates.text ?? '',
-            image: updates.image,
-            x: updates.x ?? 0,
-            y: updates.y ?? 0,
-          },
+      post: (data as Post) ?? {
+        ...existingPost,
+        ...updates,
+        id: existingPost?.id ?? postId,
+        created_at: existingPost?.created_at,
+      },
       savedToCloud: true,
     }
   } catch (error) {
     console.error('Failed to update post:', error)
-    if (!isSupabaseConfigured) {
-      const updatedPost = updateLocalPost(postId, updates)
-
-      if (!updatedPost) {
-        throw error instanceof Error ? error : new Error('Post not found')
-      }
-
-      return {
-        post: updatedPost,
-        savedToCloud: false,
-        fallbackReason: 'Supabase is not configured.',
-      }
-    }
-
     throw error instanceof Error ? error : new Error(extractSupabaseErrorReason(error))
   }
 }
 
 export async function deletePost(postId: string): Promise<DeletePostResult> {
   if (!isSupabaseConfigured) {
-    console.warn('Supabase is unavailable. Deleting post locally instead.')
-
-    const deleted = deleteLocalPost(postId)
-    if (!deleted) {
-      throw new Error('Post not found')
-    }
-
-    return {
-      deletedPostId: postId,
-      savedToCloud: false,
-      fallbackReason: 'Supabase is not configured.',
-    }
+    throw new Error('Supabase is not configured.')
   }
 
   try {
+    const { user } = await getAuthState()
+    if (!user) {
+      throw getAuthRequiredError()
+    }
+
     const { error } = await supabase
       .from('posts')
       .delete()
@@ -457,20 +415,6 @@ export async function deletePost(postId: string): Promise<DeletePostResult> {
     }
   } catch (error) {
     console.error('Failed to delete post:', error)
-    if (!isSupabaseConfigured) {
-      const deleted = deleteLocalPost(postId)
-
-      if (!deleted) {
-        throw error instanceof Error ? error : new Error('Post not found')
-      }
-
-      return {
-        deletedPostId: postId,
-        savedToCloud: false,
-        fallbackReason: 'Supabase is not configured.',
-      }
-    }
-
     throw error instanceof Error ? error : new Error(extractSupabaseErrorReason(error))
   }
 }

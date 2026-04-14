@@ -26,14 +26,20 @@ If your old Supabase project is broken, create a fresh one and use the new env t
 5. Click "Run" to execute the schema
 6. You should see "Success. No rows returned" message
 
-## Step 3: Get Your Project Credentials
+## Step 3: Configure Authentication
+
+1. In your Supabase dashboard, go to **Authentication** → **Providers** or **Email** settings
+2. Disable email confirmation for this project so username sign-up works without asking users to check email
+3. Keep email/password enabled, because the app uses a hidden internal email format behind the scenes
+
+## Step 4: Get Your Project Credentials
 
 1. In your Supabase dashboard, go to **Settings** → **API** (left sidebar)
 2. Find these two values:
    - **Project URL** (looks like: `https://abcdefghijklmnop.supabase.co`)
    - **anon/public key** (a long JWT token starting with `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...`)
 
-## Step 4: Configure Your Environment Variables
+## Step 5: Configure Your Environment Variables
 
 1. Copy `.env.example` to `.env` in your project root
 2. Replace the placeholder values with your new Supabase credentials:
@@ -49,7 +55,7 @@ VITE_SUPABASE_URL=https://abcdefghijklmnop.supabase.co
 VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFiY2RlZmdoaWprbG1ub3AiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTYzNjU1MDgzMSwiZXhwIjoxOTUyMTI2ODMxfQ.example-signature
 ```
 
-## Step 5: Restart Your Development Server
+## Step 6: Restart Your Development Server
 
 1. Stop your current development server (Ctrl+C in the terminal)
 2. Start it again:
@@ -57,7 +63,7 @@ VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
    npm run dev
    ```
 
-## Step 6: Test the Integration
+## Step 7: Test the Integration
 
 1. Open your app in the browser
 2. Try creating a new star with title, text, and image
@@ -67,7 +73,7 @@ VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
    - Go to **Table Editor** → **posts**
    - You should see your new post in the database!
 
-## Step 7: Test Cross-Device Access
+## Step 8: Test Cross-Device Access
 
 1. Open your app on a different device or browser
 2. You should see the same stars you created!
@@ -99,8 +105,8 @@ VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 
 ### Security Notes:
 
-- The current setup allows anyone to read and create posts (perfect for a public starfield)
-- If you want user authentication later, Supabase makes it easy to add
+- The current setup allows anyone to read posts, but only signed-in usernames can create, edit, or delete their own stars
+- Username sign-in uses a hidden internal email format behind the scenes so the UI never asks for an email address
 - The cleanup function prevents infinite database growth
 
 ### Deployment:

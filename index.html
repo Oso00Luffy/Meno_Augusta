@@ -25,6 +25,8 @@
     <div class="topbar">
       <span>مرحبًا بك في مجرّة الرسائل</span>
       <div class="topbar-controls">
+        <span id="authStatus" class="auth-status">جارٍ التحقق من الحساب...</span>
+        <button id="authToggle" class="auth-btn" title="تسجيل الدخول">دخول</button>
         <button id="musicToggle" class="music-btn" title="تشغيل/إيقاف الموسيقى">🎵</button>
         <button id="addBtnTop" class="add-top" title="أضف نجمة">+ أضف نجمة</button>
       </div>
@@ -77,6 +79,61 @@
           <button type="button" id="clearBtn" class="btn ghost">تفريغ</button>
         </div>
         <p id="formHint" class="hint">نحن هنا لإسعادها فاجعل رسالتك تتألق!</p>
+      </form>
+    </div>
+
+    <!-- نموذج الحساب -->
+    <div id="authSheet" class="sheet" aria-hidden="true">
+      <div class="sheet-header">
+        <h4 id="authSheetTitle">إنشاء حساب</h4>
+        <button id="authClose" class="icon-btn" type="button" aria-label="إغلاق">✕</button>
+      </div>
+      <form id="authForm">
+        <label>
+          اسم المستخدم
+          <input id="authUsernameInput" type="text" autocomplete="username" placeholder="starwalker" minlength="3" maxlength="24" required />
+        </label>
+        <label>
+          كلمة المرور
+          <div class="password-wrapper">
+            <input id="authPasswordInput" type="password" minlength="6" autocomplete="current-password" placeholder="••••••••" required />
+            <button id="togglePasswordVisibility" class="password-toggle" type="button" title="عرض كلمة المرور" aria-label="عرض أو إخفاء كلمة المرور">👁️</button>
+          </div>
+        </label>
+        
+        <!-- شروط كلمة المرور -->
+        <div id="passwordRequirements" class="password-requirements hidden">
+          <p class="requirements-title">شروط كلمة المرور:</p>
+          <ul class="requirements-list">
+            <li id="req-length" class="requirement" data-requirement="length">
+              <span class="requirement-check">✓</span>
+              <span>على الأقل 6 أحرف</span>
+            </li>
+            <li id="req-uppercase" class="requirement" data-requirement="uppercase">
+              <span class="requirement-check">✓</span>
+              <span>حرف واحد على الأقل بحالة كبيرة (A-Z)</span>
+            </li>
+            <li id="req-lowercase" class="requirement" data-requirement="lowercase">
+              <span class="requirement-check">✓</span>
+              <span>حرف واحد على الأقل بحالة صغيرة (a-z)</span>
+            </li>
+            <li id="req-number" class="requirement" data-requirement="number">
+              <span class="requirement-check">✓</span>
+              <span>رقم واحد على الأقل (0-9)</span>
+            </li>
+            <li id="req-special" class="requirement" data-requirement="special">
+              <span class="requirement-check">✓</span>
+              <span>حرف خاص واحد على الأقل (!@#$%^&*)</span>
+            </li>
+          </ul>
+        </div>
+        
+        <div class="actions">
+          <button id="authSignInBtn" type="submit" class="btn primary">دخول</button>
+          <button id="authSignUpBtn" type="button" class="btn ghost">إنشاء حساب</button>
+        </div>
+        <p id="authHint" class="hint">كل حساب يملك نجومه الخاصة، ولا يمكن تعديلها أو حذفها إلا من نفس الحساب.</p>
+        <p id="authMessage" class="hint"></p>
       </form>
     </div>
 

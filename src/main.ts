@@ -1,6 +1,19 @@
 import './style.css';
 import * as PIXI from 'pixi.js';
-import { loadPosts, addPost, updatePost, deletePost, type Post } from './supabase';
+import {
+  loadPosts,
+  addPost,
+  updatePost,
+  deletePost,
+  getAuthState,
+  onAuthStateChange,
+  signInWithUsername,
+  signUpWithUsername,
+  signOut,
+  isSupabaseConfigured,
+  type Post,
+  type AuthUserSummary,
+} from './supabase';
 import { inject, track } from '@vercel/analytics';
 
 // Initialize Vercel Analytics
@@ -39,11 +52,141 @@ let toast: HTMLDivElement;
 let formTitle: HTMLHeadingElement;
 let submitBtn: HTMLButtonElement;
 let formHint: HTMLParagraphElement;
+let authSheet: HTMLDivElement;
+let authToggle: HTMLButtonElement;
+let authClose: HTMLButtonElement;
+let authForm: HTMLFormElement;
+let authUsernameInput: HTMLInputElement;
+let authPasswordInput: HTMLInputElement;
+let authSignInBtn: HTMLButtonElement;
+let authSignUpBtn: HTMLButtonElement;
+let authStatus: HTMLSpanElement;
+let authMessage: HTMLParagraphElement;
+let authSheetTitle: HTMLHeadingElement;
+let togglePasswordVisibilityBtn: HTMLButtonElement;
+let passwordRequirementsDiv: HTMLDivElement;
+let modal: HTMLDivElement;
+let mImg: HTMLImageElement;
+let mText: HTMLParagraphElement;
+let mTitle: HTMLHeadingElement;
+let closeBtn: HTMLButtonElement;
+let modalActions: HTMLDivElement;
+let editBtn: HTMLButtonElement;
+let deleteBtn: HTMLButtonElement;
+
+let currentUser: AuthUserSummary | null = null;
+let authReady = false;
 
 function setPosts(nextPosts: Post[]) {
   posts = nextPosts;
   refreshHeroCopy();
   renderAllStars();
+}
+
+function setAuthMessage(message: string, tone: 'info' | 'success' | 'warning' | 'error' = 'info') {
+  if (!authMessage) {
+    return;
+  }
+
+  authMessage.textContent = message;
+  authMessage.dataset.tone = tone;
+}
+
+function openAuthSheet(message?: string) {
+  if (authSheet) {
+    authSheet.classList.add('open');
+  }
+
+  if (authSheetTitle) {
+    authSheetTitle.textContent = currentUser ? 'إدارة الحساب' : 'إنشاء حساب';
+  }
+
+  if (message) {
+    setAuthMessage(message, 'warning');
+  }
+}
+
+function closeAuthSheet() {
+  if (authSheet) {
+    authSheet.classList.remove('open');
+  }
+
+  if (authSheetTitle) {
+    authSheetTitle.textContent = 'إنشاء حساب';
+  }
+
+  setAuthMessage('');
+
+  // Reset password visibility and requirements
+  if (passwordRequirementsDiv) {
+    passwordRequirementsDiv.classList.add('hidden');
+  }
+  if (authPasswordInput) {
+    authPasswordInput.type = 'password';
+    if (togglePasswordVisibilityBtn) {
+      togglePasswordVisibilityBtn.textContent = '👁️';
+      togglePasswordVisibilityBtn.title = 'عرض كلمة المرور';
+    }
+  }
+}
+
+function updateAuthUI() {
+  if (!authToggle || !authStatus) {
+    return;
+  }
+
+  if (!authReady) {
+    authToggle.disabled = true;
+    authToggle.textContent = '...';
+    authToggle.title = 'جارٍ التحقق من الحساب';
+    authStatus.textContent = 'جارٍ التحقق من الحساب...';
+    return;
+  }
+
+  authToggle.disabled = false;
+
+  if (currentUser) {
+    const label = currentUser.username || currentUser.id.slice(0, 8);
+    authToggle.textContent = 'خروج';
+    authToggle.title = 'تسجيل الخروج';
+    authToggle.classList.add('signed-in');
+    authStatus.textContent = `مسجّل: ${label} • نجمتك عليها هالة زرقاء`;
+  } else {
+    authToggle.textContent = 'دخول';
+    authToggle.title = 'تسجيل الدخول';
+    authToggle.classList.remove('signed-in');
+    authStatus.textContent = 'أنت في وضع الزائر. سجّل الدخول باسم مستخدم لامتلاك النجوم.';
+  }
+}
+
+function isPostOwnedByCurrentUser(post: Post | null | undefined): boolean {
+  if (!currentUser || !post) {
+    return false;
+  }
+
+  if (post.owner_id) {
+    return post.owner_id === currentUser.id;
+  }
+
+  if (post.owner_username) {
+    return post.owner_username.toLowerCase() === currentUser.username.toLowerCase();
+  }
+
+  return false;
+}
+
+function refreshModalActions() {
+  const canModify = isPostOwnedByCurrentUser(currentModalPost);
+
+  if (modalActions) {
+    modalActions.hidden = !canModify;
+  }
+  if (editBtn) {
+    editBtn.disabled = !canModify;
+  }
+  if (deleteBtn) {
+    deleteBtn.disabled = !canModify;
+  }
 }
 
 function updatePostInState(updatedPost: Post) {
@@ -87,6 +230,59 @@ function closeFormSheet() {
   submitBtn.textContent = 'نشر';
   clearBtn.textContent = 'تفريغ';
   formHint.textContent = 'نحن هنا لإسعادها فاجعل رسالتك تتألق!';
+}
+
+// Password validation function
+function validatePasswordRequirements(password: string): Record<string, boolean> {
+  return {
+    length: password.length >= 6,
+    uppercase: /[A-Z]/.test(password),
+    lowercase: /[a-z]/.test(password),
+    number: /\d/.test(password),
+    special: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password),
+  };
+}
+
+// Update password requirements display
+function updatePasswordRequirementsDisplay(password: string) {
+  if (!passwordRequirementsDiv || !authPasswordInput) {
+    return;
+  }
+
+  // Show requirements only if user is typing
+  if (password.trim().length > 0) {
+    passwordRequirementsDiv.classList.remove('hidden');
+  } else {
+    passwordRequirementsDiv.classList.add('hidden');
+  }
+
+  const requirements = validatePasswordRequirements(password);
+  
+  // Update each requirement
+  Object.entries(requirements).forEach(([key, met]) => {
+    const element = document.getElementById(`req-${key}`);
+    if (element) {
+      if (met) {
+        element.classList.remove('unmet');
+        element.classList.add('met');
+      } else {
+        element.classList.remove('met');
+        element.classList.add('unmet');
+      }
+    }
+  });
+}
+
+// Toggle password visibility
+function togglePasswordVisibility() {
+  if (!authPasswordInput || !togglePasswordVisibilityBtn) {
+    return;
+  }
+
+  const isPassword = authPasswordInput.type === 'password';
+  authPasswordInput.type = isPassword ? 'text' : 'password';
+  togglePasswordVisibilityBtn.textContent = isPassword ? '🙈' : '👁️';
+  togglePasswordVisibilityBtn.title = isPassword ? 'إخفاء كلمة المرور' : 'عرض كلمة المرور';
 }
 
 function refreshHeroCopy() {
@@ -165,12 +361,21 @@ function getSupabaseFailureMessage(error: unknown): string {
     return 'جدول posts غير موجود في Supabase. شغّل ملف supabase-schema.sql على المشروع الجديد ثم أعد المحاولة.';
   }
 
+  if (normalizedMessage.includes('could not find the \"owner_id\" column of \"posts\"')
+    || normalizedMessage.includes("could not find the 'owner_id' column of 'posts'")) {
+    return 'قاعدة البيانات قديمة ولا تحتوي عمود owner_id. شغّل أوامر التحديث في supabase-schema.sql (قسم ALTER TABLE) ثم أعد المحاولة.';
+  }
+
   if (normalizedMessage.includes('row-level security') || normalizedMessage.includes('violates row level security policy')) {
     return 'سياسة RLS تمنع الحفظ. تأكد من تشغيل supabase-schema.sql كاملًا على المشروع الجديد.';
   }
 
   if (normalizedMessage.includes('no rows were updated on supabase') || normalizedMessage.includes('no rows were deleted on supabase')) {
     return 'لم يتم تطبيق التعديل على Supabase. شغّل supabase-schema.sql على مشروعك الحالي لتفعيل سياسات UPDATE و DELETE.';
+  }
+
+  if (normalizedMessage.includes('authentication required') || normalizedMessage.includes('sign in to create') || normalizedMessage.includes('you can only edit your own stars') || normalizedMessage.includes('you can only delete your own stars')) {
+    return 'سجّل الدخول أولاً، ثم عدّل أو احذف نجومك الخاصة فقط.';
   }
 
   if (normalizedMessage.includes('jwt') || normalizedMessage.includes('invalid api key') || normalizedMessage.includes('unauthorized')) {
@@ -302,6 +507,49 @@ async function initializePosts() {
   }
 }
 
+async function initializeAuth() {
+  if (!isSupabaseConfigured) {
+    currentUser = null;
+    authReady = true;
+    updateAuthUI();
+    return;
+  }
+
+  try {
+    const state = await getAuthState();
+    currentUser = state.user;
+  } catch (error) {
+    console.error('Failed to read auth state:', error);
+    currentUser = null;
+  } finally {
+    authReady = true;
+    updateAuthUI();
+    refreshModalActions();
+    renderAllStars();
+  }
+
+  onAuthStateChange((state) => {
+    currentUser = state.user;
+    authReady = true;
+    updateAuthUI();
+    refreshModalActions();
+    renderAllStars();
+  });
+}
+
+function colorToTint(color?: string): number {
+  if (!color) {
+    return 0xd4af37;
+  }
+
+  const normalized = color.trim().replace(/^#/, '');
+  if (!/^[0-9a-fA-F]{6}$/.test(normalized)) {
+    return 0xd4af37;
+  }
+
+  return Number.parseInt(normalized, 16);
+}
+
 // ----- PixiJS setup (async initialization) -----
 async function initPixiApp() {
   const app = new PIXI.Application();
@@ -396,6 +644,7 @@ type Star = PIXI.Sprite & {
   wobble:number;
   w:number;
   msg:Post;
+  isOwned?: boolean;
   dragging?: boolean;
   dragOffsetX?: number;
   dragOffsetY?: number;
@@ -481,7 +730,7 @@ function addStar(msg: Post){
   sp.baseScale = scale;
   sp.alpha = rand(0.85, 1); // High visibility
   (sp as any).baseAlpha = sp.alpha;
-  sp.tint = 0xffd700; // Augusta golden color
+  sp.tint = colorToTint(msg.owner_color); // Owner-specific color
   // Use stored position if available, otherwise random
   sp.x = msg.x !== undefined ? msg.x : getSpawnCoordinate(W(), (sp.scale.x * starTexture.width) / 2);
   sp.y = msg.y !== undefined ? msg.y : getSpawnCoordinate(H(), (sp.scale.y * starTexture.height) / 2);
@@ -489,9 +738,30 @@ function addStar(msg: Post){
   sp.vy = rand(-0.2, 0.2) || -0.1;
   sp.wobble = rand(0, Math.PI*2); sp.w = rand(0.001, 0.005); // Subtle pulse
   sp.eventMode = 'static'; sp.cursor = 'pointer'; sp.msg = msg;
+  sp.isOwned = isPostOwnedByCurrentUser(msg);
   sp.dragging = false;
   sp.isHovered = false;
   sp.blockTapUntil = 0;
+
+  if (sp.isOwned) {
+    // Distinct ownership marker: cyan halo and badge dot.
+    const halo = new PIXI.Graphics();
+    halo.lineStyle(4, 0x7df9ff, 0.95);
+    halo.drawCircle(50, 50, 44);
+
+    const badge = new PIXI.Graphics();
+    badge.lineStyle(2, 0x7df9ff, 1);
+    badge.beginFill(0x0f1421, 0.95);
+    badge.drawCircle(84, 16, 10);
+    badge.endFill();
+    badge.beginFill(0x7df9ff, 1);
+    badge.drawCircle(84, 16, 4);
+    badge.endFill();
+
+    sp.addChild(halo);
+    sp.addChild(badge);
+  }
+
   clampStarToViewport(sp);
   
   // Augusta-style hover effects
@@ -586,14 +856,14 @@ for (const p of posts) addStar(p);
 console.log('Total stars created:', stars.length);
 
 // ----- Modal elements -----
-const modal = document.getElementById('modal') as HTMLDivElement;
-const mImg = document.getElementById('mImg') as HTMLImageElement;
-const mText = document.getElementById('mText') as HTMLParagraphElement;
-const mTitle = document.getElementById('mTitle') as HTMLHeadingElement;
-const closeBtn = document.getElementById('closeBtn') as HTMLButtonElement;
-const modalActions = document.getElementById('modalActions') as HTMLDivElement;
-const editBtn = document.getElementById('editBtn') as HTMLButtonElement;
-const deleteBtn = document.getElementById('deleteBtn') as HTMLButtonElement;
+modal = document.getElementById('modal') as HTMLDivElement;
+mImg = document.getElementById('mImg') as HTMLImageElement;
+mText = document.getElementById('mText') as HTMLParagraphElement;
+mTitle = document.getElementById('mTitle') as HTMLHeadingElement;
+closeBtn = document.getElementById('closeBtn') as HTMLButtonElement;
+modalActions = document.getElementById('modalActions') as HTMLDivElement;
+editBtn = document.getElementById('editBtn') as HTMLButtonElement;
+deleteBtn = document.getElementById('deleteBtn') as HTMLButtonElement;
 
 function openModal(msg: Post){
   currentModalPost = msg;
@@ -610,16 +880,7 @@ function openModal(msg: Post){
     mImg.style.display = 'none';
   }
 
-  const canModify = !!msg.id;
-  if (modalActions) {
-    modalActions.hidden = !canModify;
-  }
-  if (editBtn) {
-    editBtn.disabled = !canModify;
-  }
-  if (deleteBtn) {
-    deleteBtn.disabled = !canModify;
-  }
+  refreshModalActions();
   
   // Track star viewing
   trackEvent('star_viewed', {
@@ -652,7 +913,8 @@ closeBtn.addEventListener('click', closeModal);
 editBtn.addEventListener('click', (event) => {
   event.stopPropagation();
   const postToEdit = currentModalPost;
-  if (!postToEdit) {
+  if (!postToEdit || !isPostOwnedByCurrentUser(postToEdit)) {
+    showToast('يمكنك تعديل نجومك الخاصة فقط', 'warning');
     return;
   }
 
@@ -663,7 +925,8 @@ editBtn.addEventListener('click', (event) => {
 deleteBtn.addEventListener('click', async (event) => {
   event.stopPropagation();
   const postToDelete = currentModalPost;
-  if (!postToDelete?.id) {
+  if (!postToDelete?.id || !isPostOwnedByCurrentUser(postToDelete)) {
+    showToast('يمكنك حذف نجومك الخاصة فقط', 'warning');
     return;
   }
 
@@ -678,17 +941,10 @@ deleteBtn.addEventListener('click', async (event) => {
     removePostFromState(deleteResult.deletedPostId);
     closeModal();
 
-    if (deleteResult.savedToCloud) {
-      showToast('تم حذف النجمة بنجاح', 'success');
-    } else {
-      const fallbackHint = deleteResult.fallbackReason
-        ? getSupabaseFailureMessage(deleteResult.fallbackReason)
-        : 'تعذر الاتصال بقاعدة البيانات';
-      showToast(`تم حذف النجمة محلياً فقط: ${fallbackHint}`, 'warning');
-    }
+    showToast('تم حذف النجمة بنجاح', 'success');
 
     trackEvent('star_deleted', {
-      saved_to_cloud: deleteResult.savedToCloud,
+      saved_to_cloud: true,
       had_image: !!postToDelete.image,
     });
   } catch (error) {
@@ -711,6 +967,19 @@ toast = document.getElementById('toast') as HTMLDivElement;
 formTitle = document.getElementById('sheetTitle') as HTMLHeadingElement;
 submitBtn = document.getElementById('submitBtn') as HTMLButtonElement;
 formHint = document.getElementById('formHint') as HTMLParagraphElement;
+authSheet = document.getElementById('authSheet') as HTMLDivElement;
+authToggle = document.getElementById('authToggle') as HTMLButtonElement;
+authClose = document.getElementById('authClose') as HTMLButtonElement;
+authForm = document.getElementById('authForm') as HTMLFormElement;
+authUsernameInput = document.getElementById('authUsernameInput') as HTMLInputElement;
+authPasswordInput = document.getElementById('authPasswordInput') as HTMLInputElement;
+authSignInBtn = document.getElementById('authSignInBtn') as HTMLButtonElement;
+authSignUpBtn = document.getElementById('authSignUpBtn') as HTMLButtonElement;
+authStatus = document.getElementById('authStatus') as HTMLSpanElement;
+authMessage = document.getElementById('authMessage') as HTMLParagraphElement;
+authSheetTitle = document.getElementById('authSheetTitle') as HTMLHeadingElement;
+togglePasswordVisibilityBtn = document.getElementById('togglePasswordVisibility') as HTMLButtonElement;
+passwordRequirementsDiv = document.getElementById('passwordRequirements') as HTMLDivElement;
 
 // التحقق من وجود العناصر
 console.log('Form elements check:', {
@@ -722,8 +991,14 @@ console.log('Form elements check:', {
   textInput: !!textInput,
   imageInput: !!imageInput,
   clearBtn: !!clearBtn,
-  toast: !!toast
+  toast: !!toast,
+  authSheet: !!authSheet,
+  authToggle: !!authToggle,
+  authForm: !!authForm,
 });
+
+updateAuthUI();
+initializeAuth();
 
 // Initialize posts from Supabase and render stars
 initializePosts().then(() => {
@@ -775,12 +1050,121 @@ if (isMobile) {
 addBtnTop.addEventListener('click', () => {
   console.log('Add button clicked'); // تتبع
   trackEvent('add_star_button_clicked', { source: 'top_button' });
+  if (isSupabaseConfigured && !currentUser) {
+    openAuthSheet('سجّل الدخول أولاً لإنشاء نجمتك الخاصة.');
+    return;
+  }
   openFormSheet();
 });
 sheetClose.addEventListener('click', () => {
   console.log('Close button clicked'); // تتبع
   closeFormSheet();
 });
+
+authToggle.addEventListener('click', async () => {
+  if (!authReady) {
+    return;
+  }
+
+  if (currentUser) {
+    try {
+      await signOut();
+      currentUser = null;
+      updateAuthUI();
+      refreshModalActions();
+      closeAuthSheet();
+      showToast('تم تسجيل الخروج', 'success');
+    } catch (error) {
+      console.error('Failed to sign out:', error);
+      showToast(`تعذر تسجيل الخروج: ${getSupabaseFailureMessage(error)}`, 'error');
+    }
+    return;
+  }
+
+  openAuthSheet();
+});
+
+authClose.addEventListener('click', closeAuthSheet);
+
+authSignUpBtn.addEventListener('click', async () => {
+  setAuthMessage('');
+
+  const username = authUsernameInput.value.trim();
+  const password = authPasswordInput.value;
+  if (!username || !password) {
+    setAuthMessage('أدخل اسم المستخدم وكلمة المرور أولاً.', 'warning');
+    return;
+  }
+
+  authSignUpBtn.disabled = true;
+  authSignInBtn.disabled = true;
+
+  try {
+    const user = await signUpWithUsername(username, password);
+    currentUser = user;
+    updateAuthUI();
+    refreshModalActions();
+
+    if (user) {
+      closeAuthSheet();
+      showToast('تم إنشاء الحساب وتسجيل الدخول بنجاح', 'success');
+    } else {
+      setAuthMessage('تم إنشاء الحساب. سجّل الدخول باسم المستخدم الذي اخترته.', 'success');
+    }
+  } catch (error) {
+    console.error('Failed to sign up:', error);
+    setAuthMessage(`تعذر إنشاء الحساب: ${getSupabaseFailureMessage(error)}`, 'error');
+  } finally {
+    authSignUpBtn.disabled = false;
+    authSignInBtn.disabled = false;
+  }
+});
+
+authForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  setAuthMessage('');
+
+  const username = authUsernameInput.value.trim();
+  const password = authPasswordInput.value;
+  if (!username || !password) {
+    setAuthMessage('أدخل اسم المستخدم وكلمة المرور أولاً.', 'warning');
+    return;
+  }
+
+  authSignInBtn.disabled = true;
+  authSignUpBtn.disabled = true;
+
+  try {
+    const user = await signInWithUsername(username, password);
+    currentUser = user;
+    updateAuthUI();
+    refreshModalActions();
+    closeAuthSheet();
+    showToast('تم تسجيل الدخول بنجاح', 'success');
+  } catch (error) {
+    console.error('Failed to sign in:', error);
+    setAuthMessage(`تعذر تسجيل الدخول: ${getSupabaseFailureMessage(error)}`, 'error');
+  } finally {
+    authSignInBtn.disabled = false;
+    authSignUpBtn.disabled = false;
+  }
+});
+
+// Password visibility toggle
+if (togglePasswordVisibilityBtn) {
+  togglePasswordVisibilityBtn.addEventListener('click', (event) => {
+    event.preventDefault();
+    togglePasswordVisibility();
+  });
+}
+
+// Real-time password validation
+if (authPasswordInput) {
+  authPasswordInput.addEventListener('input', (event) => {
+    const password = (event.target as HTMLInputElement).value;
+    updatePasswordRequirementsDisplay(password);
+  });
+}
 
 // optional: close sheet when clicking outside (on the parallax/backdrop)
 document.addEventListener('click', (e) => {
@@ -832,6 +1216,12 @@ starForm.addEventListener('submit', async (e) => {
 
   const isEditing = !!editingPostId;
 
+  if (isSupabaseConfigured && !currentUser) {
+    showToast('سجّل الدخول أولاً لإنشاء نجمتك الخاصة', 'warning');
+    openAuthSheet('تحتاج إلى حساب حتى تمتلك النجمة الجديدة.');
+    return;
+  }
+
   // تعطيل زر الإرسال أثناء المعالجة
   submitBtn.disabled = true;
   submitBtn.textContent = isEditing ? 'جاري التحديث...' : 'جاري النشر...';
@@ -862,6 +1252,11 @@ starForm.addEventListener('submit', async (e) => {
 
     if (isEditing && !existingPost) {
       showToast('تعذر العثور على النجمة الأصلية للتعديل', 'error');
+      return;
+    }
+
+    if (isEditing && !isPostOwnedByCurrentUser(existingPost)) {
+      showToast('يمكنك تعديل نجومك الخاصة فقط', 'warning');
       return;
     }
     
@@ -913,18 +1308,7 @@ starForm.addEventListener('submit', async (e) => {
         }
         celebratePublish();
         closeFormSheet();
-        if (saveResult.savedToCloud) {
-          showToast(isEditing ? 'تم تحديث النجمة بنجاح! ✨' : 'تم النشر بنجاح! ✨');
-        } else {
-          const fallbackHint = saveResult.fallbackReason
-            ? getSupabaseFailureMessage(saveResult.fallbackReason)
-            : 'تعذر الاتصال بقاعدة البيانات';
-          showToast(
-            `${isEditing ? 'تم تحديث الرسالة' : 'تم حفظ الرسالة'} محلياً فقط: ${fallbackHint}`,
-            'warning'
-          );
-          console.warn('Saved locally instead of Supabase:', saveResult.fallbackReason);
-        }
+        showToast(isEditing ? 'تم تحديث النجمة بنجاح! ✨' : 'تم النشر بنجاح! ✨');
         
         // Track successful star creation
         trackEvent(isEditing ? 'star_updated' : 'star_created', {
@@ -932,11 +1316,11 @@ starForm.addEventListener('submit', async (e) => {
           title_length: savedPost.title.length,
           text_length: savedPost.text.length,
           device_type: isTouchDevice ? 'touch' : 'desktop',
-          saved_to_cloud: saveResult.savedToCloud,
+          saved_to_cloud: true,
           edit_mode: isEditing,
         });
         
-        console.log('Post published:', saveResult.savedToCloud ? 'Supabase' : 'local fallback'); // تتبع
+        console.log('Post published: Supabase'); // تتبع
       } else {
         throw new Error(isEditing ? 'Failed to update post' : 'Failed to save post to Supabase');
       }

@@ -9,6 +9,8 @@ A beautiful interactive starfield application inspired by Augusta from Wuthering
 - **Ambient Music**: Beautiful background music creates an immersive cosmic experience
 - **Elegant Design**: Wuthering Waves Augusta-inspired color palette and aesthetics
 - **Persistent Cloud Storage**: Your creations are saved in Supabase and accessible from anywhere
+- **Account Ownership**: Each star belongs to the signed-in username that created it
+- **Owner Colors**: Every username gets a consistent star color so ownership is visible at a glance
 - **Cross-Device Sync**: View your stars on any device, anywhere in the world
 - **Mobile-Friendly**: Optimized for phones, tablets, and desktop devices
 - **Responsive UI**: Beautiful modal interface for creating and viewing posts
@@ -32,6 +34,7 @@ To enable cloud storage and make your stars accessible from anywhere:
    - Run the SQL schema from `supabase-schema.sql`
    - Copy `.env.example` to `.env` and add your new credentials
    - Restart the dev server
+3. **Create Accounts**: Users must sign in before creating, editing, or deleting stars. Each signed-in username owns its own posts.
 
 Without Supabase setup, the app will still work offline using local storage.
 
@@ -76,10 +79,11 @@ The built files will be in the `dist` directory, ready for deployment to Vercel,
 ## How to Use
 
 1. **Create a Star**: Click anywhere on the canvas to open the creation modal
-2. **Add Content**: Fill in your title, text, and optionally upload an image
-3. **Publish**: Click "نشر" (Publish) to create your star
-4. **View Stars**: Click on any existing star to view its content
-5. **Explore**: Navigate the beautiful Augusta-inspired starfield
+2. **Sign In**: Use the account button in the top bar to create an account or sign in
+3. **Add Content**: Fill in your title, text, and optionally upload an image
+4. **Publish**: Click "نشر" (Publish) to create your star
+5. **View Stars**: Click on any existing star to view its content
+6. **Manage Your Stars**: Edit and delete are available only for the stars owned by your account
 
 ## Technology Stack
 
@@ -87,6 +91,7 @@ The built files will be in the `dist` directory, ready for deployment to Vercel,
 - **TypeScript**: Type-safe development
 - **Vite**: Fast build tool and development server
 - **Supabase**: Cloud database for persistent storage
+- **Supabase Auth**: Email/password accounts and ownership-based access control
 - **Vercel Analytics**: User behavior and performance tracking
 - **CSS3**: Modern styling with Augusta-inspired themes
 
