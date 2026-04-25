@@ -712,17 +712,14 @@ const W = () => app.renderer.width; const H = () => app.renderer.height;
 function rand(a:number,b:number){ return a + Math.random()*(b-a) }
 let activeDragStar: Star | null = null;
 
-function getStarRadius(sp: Star): number {
-  return Math.max(14, (sp.width || 0) * 0.5, (sp.height || 0) * 0.5);
-}
 
 function clampStarToViewport(sp: Star) {
-  const radius = getStarRadius(sp);
   const w = W();
   const h = H();
 
-  sp.x = Math.min(Math.max(sp.x, radius), Math.max(radius, w - radius));
-  sp.y = Math.min(Math.max(sp.y, radius), Math.max(radius, h - radius));
+  // Allow stars to reach the edges of the viewport
+  sp.x = Math.min(Math.max(sp.x, 0), w);
+  sp.y = Math.min(Math.max(sp.y, 0), h);
 }
 
 function getSpawnCoordinate(limit: number, radius: number): number {
@@ -1469,21 +1466,20 @@ app.ticker.add((ticker: PIXI.Ticker) => {
       sp.vx *= dragFriction;
       sp.vy *= dragFriction;
 
-      const radius = getStarRadius(sp);
-
-      if (sp.x < radius) {
-        sp.x = radius;
+      // Bounce off viewport edges
+      if (sp.x < 0) {
+        sp.x = 0;
         sp.vx = Math.abs(sp.vx) * bounce;
-      } else if (sp.x > w - radius) {
-        sp.x = w - radius;
+      } else if (sp.x > w) {
+        sp.x = w;
         sp.vx = -Math.abs(sp.vx) * bounce;
       }
 
-      if (sp.y < radius) {
-        sp.y = radius;
+      if (sp.y < 0) {
+        sp.y = 0;
         sp.vy = Math.abs(sp.vy) * bounce;
-      } else if (sp.y > h - radius) {
-        sp.y = h - radius;
+      } else if (sp.y > h) {
+        sp.y = h;
         sp.vy = -Math.abs(sp.vy) * bounce;
       }
     }
