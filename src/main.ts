@@ -39,7 +39,6 @@ let modalOpenedAt = 0;
 let editingPostId: string | null = null;
 let editingOriginalImage: string | undefined;
 let renderAllStars: () => void = () => {};
-const supportsStarHover = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
 let formSheet: HTMLDivElement;
 let addBtnTop: HTMLButtonElement;
 let sheetClose: HTMLButtonElement;
@@ -52,6 +51,8 @@ let toast: HTMLDivElement;
 let formTitle: HTMLHeadingElement;
 let submitBtn: HTMLButtonElement;
 let formHint: HTMLParagraphElement;
+let colorPickerDiv: HTMLDivElement;
+let selectedColor: string = '#d4af37'; // Default to gold
 let authSheet: HTMLDivElement;
 let authToggle: HTMLButtonElement;
 let authClose: HTMLButtonElement;
@@ -199,6 +200,46 @@ function removePostFromState(postId: string) {
   setPosts(nextPosts);
 }
 
+// Initialize color picker with available colors
+const OWNER_COLORS = ['#d4af37', '#4a9eff', '#a855f7', '#22c55e', '#f59e0b', '#f472b6', '#38bdf8'];
+function initializeColorPicker() {
+  if (!colorPickerDiv) return;
+  
+  colorPickerDiv.innerHTML = '';
+  OWNER_COLORS.forEach((color) => {
+    const colorButton = document.createElement('button');
+    colorButton.type = 'button';
+    colorButton.className = 'color-option';
+    colorButton.style.backgroundColor = color;
+    colorButton.style.width = '40px';
+    colorButton.style.height = '40px';
+    colorButton.style.borderRadius = '50%';
+    colorButton.style.border = selectedColor === color ? '3px solid #fff' : '2px solid rgba(255,255,255,0.3)';
+    colorButton.style.cursor = 'pointer';
+    colorButton.title = color;
+    
+    colorButton.addEventListener('click', (e) => {
+      e.preventDefault();
+      selectedColor = color;
+      // Update all color buttons to show selection
+      document.querySelectorAll('.color-option').forEach((btn) => {
+        (btn as HTMLButtonElement).style.border = (btn as any).getAttribute('data-color') === color 
+          ? '3px solid #fff' 
+          : '2px solid rgba(255,255,255,0.3)';
+      });
+    });
+    
+    colorButton.setAttribute('data-color', color);
+    colorPickerDiv.appendChild(colorButton);
+  });
+  
+  // Set the first color button as selected by default
+  const firstButton = colorPickerDiv.querySelector('.color-option') as HTMLButtonElement;
+  if (firstButton) {
+    firstButton.style.border = '3px solid #fff';
+  }
+}
+
 function openFormSheet(post?: Post) {
   editingPostId = post?.id ?? null;
   editingOriginalImage = post?.image;
@@ -207,11 +248,13 @@ function openFormSheet(post?: Post) {
   if (post) {
     titleInput.value = post.title;
     textInput.value = post.text;
+    selectedColor = post.owner_color || '#d4af37'; // Load existing color or default
     formTitle.textContent = 'تعديل النجمة';
     submitBtn.textContent = 'تحديث';
     clearBtn.textContent = 'تفريغ';
     formHint.textContent = 'عدّل الرسالة أو الصورة ثم احفظ التغييرات.';
   } else {
+    selectedColor = '#d4af37'; // Reset to default gold
     formTitle.textContent = 'أرسل نجمتك';
     submitBtn.textContent = 'نشر';
     clearBtn.textContent = 'تفريغ';
@@ -219,17 +262,20 @@ function openFormSheet(post?: Post) {
   }
 
   formSheet.classList.add('open');
+  initializeColorPicker(); // Update color picker UI when form opens
 }
 
 function closeFormSheet() {
   formSheet.classList.remove('open');
   editingPostId = null;
   editingOriginalImage = undefined;
+  selectedColor = '#d4af37'; // Reset color to default
   starForm.reset();
   formTitle.textContent = 'أرسل نجمتك';
   submitBtn.textContent = 'نشر';
   clearBtn.textContent = 'تفريغ';
   formHint.textContent = 'نحن هنا لإسعادها فاجعل رسالتك تتألق!';
+  initializeColorPicker(); // Reset color picker UI
 }
 
 // Password validation function
@@ -771,23 +817,22 @@ function addStar(msg: Post){
   clampStarToViewport(sp);
   
   // Augusta-style hover effects
-  if (supportsStarHover) {
-    sp.on('pointerover', () => { 
-      if (sp.dragging || sp.isHovered) return;
-      sp.isHovered = true;
-      sp.__oldTint = sp.tint as number; 
-      sp.scale.set((sp.baseScale ?? scale) * 1.5); 
-      sp.tint = 0xffffff; // Bright white on hover
-      clampStarToViewport(sp);
-    });
-    sp.on('pointerout', () => { 
-      if (sp.dragging || !sp.isHovered) return;
-      sp.isHovered = false;
-      sp.scale.set(sp.baseScale ?? scale); 
-      sp.tint = (sp.__oldTint || 0xffd700) as any; 
-      clampStarToViewport(sp);
-    });
-  }
+  sp.on('pointerover', () => { 
+    if (sp.dragging || sp.isHovered) return;
+    sp.isHovered = true;
+    sp.__oldTint = sp.tint as number; 
+    sp.scale.set((sp.baseScale ?? scale) * 1.5); 
+    sp.tint = 0xffffff; // Bright white on hover
+    clampStarToViewport(sp);
+  });
+  sp.on('pointerout', () => { 
+    if (sp.dragging || !sp.isHovered) return;
+    sp.isHovered = false;
+    sp.scale.set(sp.baseScale ?? scale); 
+    sp.tint = (sp.__oldTint ?? 0xffd700) as any; 
+    clampStarToViewport(sp);
+  });
+  
   sp.on('pointerdown', (event: PIXI.FederatedPointerEvent) => {
     activeDragStar = sp;
     sp.dragging = true;
@@ -968,6 +1013,7 @@ starForm = document.getElementById('starForm') as HTMLFormElement;
 titleInput = document.getElementById('titleInput') as HTMLInputElement;
 textInput = document.getElementById('textInput') as HTMLTextAreaElement;
 imageInput = document.getElementById('imageInput') as HTMLInputElement;
+colorPickerDiv = document.getElementById('colorPicker') as HTMLDivElement;
 clearBtn = document.getElementById('clearBtn') as HTMLButtonElement;
 toast = document.getElementById('toast') as HTMLDivElement;
 formTitle = document.getElementById('sheetTitle') as HTMLHeadingElement;
@@ -1185,6 +1231,8 @@ clearBtn.addEventListener('click', () => {
   titleInput.value=''; 
   textInput.value=''; 
   imageInput.value='';
+  selectedColor = '#d4af37'; // Reset to default color
+  initializeColorPicker(); // Refresh color picker UI
   console.log('Form cleared');
 });
 
@@ -1295,7 +1343,8 @@ starForm.addEventListener('submit', async (e) => {
       text: textInput.value.trim(),
       image: dataUrl,
       x: x,
-      y: y
+      y: y,
+      owner_color: selectedColor
     };
     
     console.log('Saving post to Supabase...'); // تتبع

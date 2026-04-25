@@ -301,6 +301,7 @@ export async function addPost(post: Omit<Post, 'id' | 'created_at'>): Promise<Ad
       image: post.image,
       x: post.x,
       y: post.y,
+      owner_color: post.owner_color,
     }
 
     const { data, error } = await supabase
@@ -361,6 +362,7 @@ export async function updatePost(
         image: updates.image,
         x: updates.x,
         y: updates.y,
+        owner_color: updates.owner_color,
       })
       .eq('id', postId)
       .select('*')
