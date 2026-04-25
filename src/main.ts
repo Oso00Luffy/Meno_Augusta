@@ -716,10 +716,13 @@ let activeDragStar: Star | null = null;
 function clampStarToViewport(sp: Star) {
   const w = W();
   const h = H();
+  
+  // Calculate visual radius (half the texture size scaled)
+  const visualRadius = (sp.scale.x * (starTexture.width || 100)) / 2;
 
-  // Allow stars to reach the edges of the viewport
-  sp.x = Math.min(Math.max(sp.x, 0), w);
-  sp.y = Math.min(Math.max(sp.y, 0), h);
+  // Keep stars fully visible by clamping with visual radius margin
+  sp.x = Math.min(Math.max(sp.x, visualRadius), w - visualRadius);
+  sp.y = Math.min(Math.max(sp.y, visualRadius), h - visualRadius);
 }
 
 function getSpawnCoordinate(limit: number, radius: number): number {
@@ -1466,20 +1469,22 @@ app.ticker.add((ticker: PIXI.Ticker) => {
       sp.vx *= dragFriction;
       sp.vy *= dragFriction;
 
-      // Bounce off viewport edges
-      if (sp.x < 0) {
-        sp.x = 0;
+      // Bounce off viewport edges with visual bounds
+      const visualRadius = (sp.scale.x * (starTexture.width || 100)) / 2;
+      
+      if (sp.x < visualRadius) {
+        sp.x = visualRadius;
         sp.vx = Math.abs(sp.vx) * bounce;
-      } else if (sp.x > w) {
-        sp.x = w;
+      } else if (sp.x > w - visualRadius) {
+        sp.x = w - visualRadius;
         sp.vx = -Math.abs(sp.vx) * bounce;
       }
 
-      if (sp.y < 0) {
-        sp.y = 0;
+      if (sp.y < visualRadius) {
+        sp.y = visualRadius;
         sp.vy = Math.abs(sp.vy) * bounce;
-      } else if (sp.y > h) {
-        sp.y = h;
+      } else if (sp.y > h - visualRadius) {
+        sp.y = h - visualRadius;
         sp.vy = -Math.abs(sp.vy) * bounce;
       }
     }
