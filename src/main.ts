@@ -74,6 +74,7 @@ let closeBtn: HTMLButtonElement;
 let modalActions: HTMLDivElement;
 let editBtn: HTMLButtonElement;
 let deleteBtn: HTMLButtonElement;
+let topbarTitle: HTMLSpanElement;
 
 let currentUser: AuthUserSummary | null = null;
 let authReady = false;
