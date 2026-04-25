@@ -712,6 +712,14 @@ const W = () => app.renderer.width; const H = () => app.renderer.height;
 function rand(a:number,b:number){ return a + Math.random()*(b-a) }
 let activeDragStar: Star | null = null;
 
+// Responsive star sizing - scales down on mobile for better spacing
+function getStarScaleMultiplier(): number {
+  const vw = window.innerWidth;
+  if (vw < 768) return 0.65; // Mobile: 65% of normal size
+  if (vw < 1200) return 0.85; // Tablet: 85% of normal size
+  return 1.0; // Desktop: full size
+}
+
 
 function clampStarToViewport(sp: Star) {
   const w = W();
@@ -773,7 +781,9 @@ app.stage.on('pointercancel', endStarDrag);
 
 function addStar(msg: Post){
   const sp = new PIXI.Sprite(starTexture) as Star;
-  const scale = rand(0.4, 1.2); // Varied sizes for visual interest
+  const baseScale = rand(0.4, 1.2); // Varied sizes for visual interest
+  const scaleMultiplier = getStarScaleMultiplier(); // Responsive scaling
+  const scale = baseScale * scaleMultiplier; // Apply mobile/tablet scaling
   sp.scale.set(scale);
   sp.baseScale = scale;
   sp.alpha = rand(0.85, 1); // High visibility
