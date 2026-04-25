@@ -74,7 +74,6 @@ let closeBtn: HTMLButtonElement;
 let modalActions: HTMLDivElement;
 let editBtn: HTMLButtonElement;
 let deleteBtn: HTMLButtonElement;
-let topbarTitle: HTMLSpanElement;
 
 let currentUser: AuthUserSummary | null = null;
 let authReady = false;
@@ -713,25 +712,17 @@ const W = () => app.renderer.width; const H = () => app.renderer.height;
 function rand(a:number,b:number){ return a + Math.random()*(b-a) }
 let activeDragStar: Star | null = null;
 
-// Responsive star sizing - scales down on mobile for better spacing
-function getStarScaleMultiplier(): number {
-  const vw = window.innerWidth;
-  if (vw < 768) return 0.65; // Mobile: 65% of normal size
-  if (vw < 1200) return 0.85; // Tablet: 85% of normal size
-  return 1.0; // Desktop: full size
+function getStarRadius(sp: Star): number {
+  return Math.max(14, (sp.width || 0) * 0.5, (sp.height || 0) * 0.5);
 }
-
 
 function clampStarToViewport(sp: Star) {
   const w = W();
   const h = H();
-  
-  // Calculate visual radius (half the texture size scaled)
-  const visualRadius = (sp.scale.x * (starTexture.width || 100)) / 2;
 
-  // Keep stars fully visible by clamping with visual radius margin
-  sp.x = Math.min(Math.max(sp.x, visualRadius), w - visualRadius);
-  sp.y = Math.min(Math.max(sp.y, visualRadius), h - visualRadius);
+  // Allow stars to reach the edges of the viewport
+  sp.x = Math.min(Math.max(sp.x, 0), w);
+  sp.y = Math.min(Math.max(sp.y, 0), h);
 }
 
 function getSpawnCoordinate(limit: number, radius: number): number {
@@ -782,9 +773,7 @@ app.stage.on('pointercancel', endStarDrag);
 
 function addStar(msg: Post){
   const sp = new PIXI.Sprite(starTexture) as Star;
-  const baseScale = rand(0.4, 1.2); // Varied sizes for visual interest
-  const scaleMultiplier = getStarScaleMultiplier(); // Responsive scaling
-  const scale = baseScale * scaleMultiplier; // Apply mobile/tablet scaling
+  const scale = rand(0.4, 1.2); // Varied sizes for visual interest
   sp.scale.set(scale);
   sp.baseScale = scale;
   sp.alpha = rand(0.85, 1); // High visibility
@@ -1480,22 +1469,21 @@ app.ticker.add((ticker: PIXI.Ticker) => {
       sp.vx *= dragFriction;
       sp.vy *= dragFriction;
 
-      // Bounce off viewport edges with visual bounds
-      const visualRadius = (sp.scale.x * (starTexture.width || 100)) / 2;
-      
-      if (sp.x < visualRadius) {
-        sp.x = visualRadius;
+      const radius = getStarRadius(sp);
+
+      if (sp.x < radius) {
+        sp.x = radius;
         sp.vx = Math.abs(sp.vx) * bounce;
-      } else if (sp.x > w - visualRadius) {
-        sp.x = w - visualRadius;
+      } else if (sp.x > w - radius) {
+        sp.x = w - radius;
         sp.vx = -Math.abs(sp.vx) * bounce;
       }
 
-      if (sp.y < visualRadius) {
-        sp.y = visualRadius;
+      if (sp.y < radius) {
+        sp.y = radius;
         sp.vy = Math.abs(sp.vy) * bounce;
-      } else if (sp.y > h - visualRadius) {
-        sp.y = h - visualRadius;
+      } else if (sp.y > h - radius) {
+        sp.y = h - radius;
         sp.vy = -Math.abs(sp.vy) * bounce;
       }
     }

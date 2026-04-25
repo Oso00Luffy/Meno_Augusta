@@ -15,7 +15,10 @@
 }
 
 * { box-sizing: border-box }
-html, body { height: 100% }
+html, body { 
+  height: 100%;
+  overflow: hidden;
+}
 
 body {
   margin: 0;
@@ -62,6 +65,8 @@ body::before {
   text-align: center;
   opacity: 0;
   animation: heroReveal 900ms ease forwards;
+  display: none;
+  pointer-events: none;
 }
 
 .hero-kicker {
@@ -126,6 +131,7 @@ body::before {
   color: var(--text-secondary);
   backdrop-filter: blur(12px);
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  transition: opacity 0.5s ease;
 }
 
 .topbar-controls {
@@ -144,6 +150,7 @@ body::before {
   color: var(--text-secondary);
   backdrop-filter: blur(12px);
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  transition: opacity 0.5s ease;
 }
 
 .auth-btn {
@@ -227,6 +234,21 @@ body::before {
   box-shadow: 0 8px 32px rgba(212, 175, 55, 0.25);
   transform: translateY(-1px);
 }
+
+/* Reorder buttons when text fades out */
+.topbar.buttons-only {
+  gap: 6px;
+  padding: 0 8px;
+  top: 8px;
+  left: calc(50% + 60px);
+  transform: translateX(-50%) !important;
+  transition: top 0.5s ease;
+}
+
+.topbar.buttons-only .topbar-controls {
+  gap: 6px;
+}
+
 .modal {
   position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
   background: rgba(10, 13, 26, 0.85); backdrop-filter: blur(8px); z-index: 4;
@@ -329,7 +351,6 @@ body::before {
 .sheet {
   position: fixed; inset-inline-start: 0; top: 0; bottom: 0; width: min(450px, 92vw);
   background: linear-gradient(135deg, rgba(26, 31, 46, 0.95), rgba(15, 20, 33, 0.95));
-  border-inline-end: 1px solid var(--border);
   transform: translateX(-102%); transition: transform .3s ease; z-index: 7;
   display: none; flex-direction: column; padding: 20px;
   backdrop-filter: blur(16px);
@@ -642,6 +663,18 @@ input[type="password"]:focus {
     gap: 12px;
   }
 
+  .topbar.buttons-only {
+    gap: 8px;
+    padding: 0 8px;
+    top: 8px;
+    left: 50% !important;
+    flex-direction: row;
+  }
+
+  .topbar.buttons-only .topbar-controls {
+    gap: 8px;
+  }
+
   .auth-status {
     order: 1;
     width: 100%;
@@ -835,9 +868,26 @@ input[type="password"]:focus {
     padding: 6px 10px;
   }
 
+  .topbar.buttons-only {
+    gap: 4px;
+    padding: 0 4px;
+    top: 6px;
+    left: 50% !important;
+    width: auto;
+  }
+
+  .topbar.buttons-only .topbar-controls {
+    gap: 4px;
+  }
+
+  .auth-btn, .music-btn, .add-top {
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+
   .add-top {
-    padding: 10px 14px;
-    font-size: 13px;
+    padding: 8px 10px;
+    font-size: 12px;
   }
 
   /* Hide planets on very small screens for better performance */
