@@ -151,12 +151,12 @@ function updateAuthUI() {
     authToggle.textContent = 'خروج';
     authToggle.title = 'تسجيل الخروج';
     authToggle.classList.add('signed-in');
-    authStatus.textContent = `مسجّل: ${label} • نجمتك عليها هالة زرقاء`;
+    authStatus.textContent = `مسجّل: ${label} • نجمتك عليها هالة `;
   } else {
     authToggle.textContent = 'دخول';
     authToggle.title = 'تسجيل الدخول';
     authToggle.classList.remove('signed-in');
-    authStatus.textContent = 'أنت في وضع الزائر. سجّل الدخول باسم مستخدم لامتلاك النجوم.';
+    authStatus.textContent = 'أنت في وضع الزائر. سجّل الدخول لامتلاك النجوم.';
   }
 }
 
@@ -641,24 +641,60 @@ app.stage.eventMode = 'static';
 app.stage.hitArea = app.screen;
 
 // Add canvas click/tap handler - disabled on mobile to prevent accidental triggers
-app.stage.on('pointertap', (event) => {
-  // Check if click was on empty space (not on a star)
-  const target = event.target;
-  if (target === app.stage) {
-    // Only enable canvas tap on desktop to avoid mobile UX issues
-    if (!isTouchDevice) {
-      console.log('Canvas clicked - opening form sheet');
-      trackEvent('canvas_tapped', { device_type: 'mouse' });
-      const formSheet = document.getElementById('formSheet') as HTMLDivElement;
-      if (formSheet) {
-        formSheet.classList.add('open');
-      }
-    } else {
-      // On mobile, just show a helpful message
-      console.log('Canvas tapped on mobile - use the button to add stars');
-    }
+// Canvas click to add stars disabled - use button only
+
+// ----- Asteroid Animation -----
+const asteroids: Array<PIXI.Container & {vx: number, vy: number, rotation_speed: number}> = [];
+
+function createAsteroid() {
+  const container = new PIXI.Container();
+  const asteroid = new PIXI.Graphics();
+  
+  // Draw a rocky asteroid shape
+  asteroid.lineStyle(2, 0x8b7355, 0.8);
+  asteroid.beginFill(0xa0826d, 0.7);
+  
+  // Create irregular polygon for rocky appearance
+  const sides = 8;
+  const baseRadius = 35;
+  const points = [];
+  for (let i = 0; i < sides; i++) {
+    const angle = (i / sides) * Math.PI * 2;
+    const variance = 0.7 + Math.random() * 0.3;
+    const x = Math.cos(angle) * baseRadius * variance;
+    const y = Math.sin(angle) * baseRadius * variance;
+    points.push(new PIXI.Point(x, y));
   }
-});
+  
+  asteroid.drawPolygon(points);
+  asteroid.endFill();
+  
+  // Add some crater details
+  asteroid.lineStyle(1, 0x6b5345, 0.5);
+  for (let i = 0; i < 3; i++) {
+    const x = (Math.random() - 0.5) * 40;
+    const y = (Math.random() - 0.5) * 40;
+    const size = Math.random() * 6 + 3;
+    asteroid.drawCircle(x, y, size);
+  }
+  
+  container.addChild(asteroid);
+  container.x = Math.random() * app.renderer.width;
+  container.y = Math.random() * app.renderer.height * -0.5; // Start above screen
+  
+  // Animation properties
+  (container as any).vx = (Math.random() - 0.5) * 0.5;
+  (container as any).vy = 0.2 + Math.random() * 0.3;
+  (container as any).rotation_speed = (Math.random() - 0.5) * 0.05;
+  
+  app.stage.addChildAt(container, 1);
+  return container as any;
+}
+
+// Create multiple asteroids
+for (let i = 0; i < 3; i++) {
+  asteroids.push(createAsteroid());
+}
 
 // Augusta-inspired star texture with golden glow
 function makeGlowTexture(size=100){
@@ -1458,6 +1494,22 @@ app.ticker.add((ticker: PIXI.Ticker) => {
   const w = W(), h = H();
   const dragFriction = 0.985;
   const bounce = 0.72;
+  
+  // Update asteroids
+  for (let i = asteroids.length - 1; i >= 0; i--) {
+    const ast = asteroids[i];
+    ast.rotation += ast.rotation_speed;
+    ast.x += ast.vx * delta;
+    ast.y += ast.vy * delta;
+    
+    // Reset asteroid when it goes off screen
+    if (ast.y > h + 50 || ast.x > w + 100 || ast.x < -100) {
+      app.stage.removeChild(ast);
+      asteroids.splice(i, 1);
+      asteroids.push(createAsteroid());
+    }
+  }
+  
   for (const sp of stars) {
     sp.wobble += sp.w * delta;
 
